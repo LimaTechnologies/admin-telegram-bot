@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** master
-**Date:** 2026-01-26
-**Summary:** Completed Telegram Ads Management Dashboard with all 13 dashboard pages, tRPC API, MongoDB models, BullMQ queues, grammY bot, and magic link authentication.
+**Branch:** feature/dev-auth-bypass
+**Date:** 2026-01-27
+**Summary:** Added dev bypass authentication for first admin user (joaovitor_rlima@hotmail.com) - auto-creates admin and logs in directly without email service.
 
 ---
 

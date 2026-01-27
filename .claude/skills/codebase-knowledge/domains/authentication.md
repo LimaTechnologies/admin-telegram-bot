@@ -1,9 +1,9 @@
 # Domain: Authentication
 
 ## Last Update
-- **Date:** 2026-01-26
-- **Commit:** ef480b4
-- **Summary:** Magic link authentication with HTTP-only cookies
+- **Date:** 2026-01-27
+- **Commit:** 066c8e5
+- **Summary:** Added dev bypass for first admin user (joaovitor_rlima@hotmail.com)
 
 ## Files
 
@@ -30,6 +30,7 @@
 - **pages** - Login and verify pages consume auth API
 
 ## Recent Commits
+- `066c8e5` - feat: add dev bypass authentication for first admin user
 - `c4cf62c` - feat: add all missing dashboard pages
 - Initial auth implementation
 
@@ -51,7 +52,18 @@
 7. Set HTTP-only cookie (7 days)
 8. Redirect to /dashboard
 
+### Dev Bypass Flow (for joaovitor_rlima@hotmail.com)
+1. User enters dev bypass email → POST /login
+2. AuthService.isDevBypassEmail() returns true
+3. AuthService.devLogin() creates admin user if not exists
+4. Session created directly (no magic link email)
+5. HTTP-only cookie set immediately
+6. Response includes `directLogin: true`
+7. Frontend redirects to /groups immediately
+
 ### Gotchas
 - verify/page.tsx uses useRef to prevent double verification on StrictMode
 - Session middleware checks cookie on every protected route
 - Logout clears both cookie and database session
+- DEV_BYPASS_EMAIL in auth.service.ts allows direct login without email service
+- Dev bypass auto-creates admin user if not exists in database
