@@ -1,12 +1,12 @@
 import { Queue, QueueEvents } from 'bullmq';
 import { getRedisConnection } from './connection';
 
-// Queue names
+// Queue names (no colons allowed in BullMQ queue names)
 export const QUEUE_NAMES = {
-  POST_GROUP: (groupId: string) => `post:group:${groupId}`,
-  AUDIT_LOG: 'audit:log',
-  ANALYTICS_AGGREGATE: 'analytics:aggregate',
-  CAMPAIGN_CHECK: 'campaign:check',
+  POST_GROUP: (groupId: string) => `post-group-${groupId}`,
+  AUDIT_LOG: 'audit-log',
+  ANALYTICS_AGGREGATE: 'analytics-aggregate',
+  CAMPAIGN_CHECK: 'campaign-check',
 } as const;
 
 // Default queue options
