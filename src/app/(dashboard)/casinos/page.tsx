@@ -15,6 +15,16 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -27,6 +37,15 @@ export default function CasinosPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [riskFilter, setRiskFilter] = useState<'low' | 'medium' | 'high' | 'all'>('all');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '',
+    brand: '',
+    websiteUrl: '',
+    riskLevel: 'medium' as 'low' | 'medium' | 'high',
+    funnelStyle: 'direct' as 'direct' | 'landing' | 'chatbot',
+    welcomeBonus: '',
+  });
 
   const { data, isLoading, refetch } = trpc.casino.list.useQuery({
     page,
@@ -37,6 +56,16 @@ export default function CasinosPage() {
 
   const { data: stats } = trpc.casino.getStats.useQuery();
 
+  const createCasino = trpc.casino.create.useMutation({
+    onSuccess: () => {
+      toast.success('Casino created successfully');
+      setCreateOpen(false);
+      setFormData({ name: '', brand: '', websiteUrl: '', riskLevel: 'medium', funnelStyle: 'direct', welcomeBonus: '' });
+      refetch();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   const deleteCasino = trpc.casino.delete.useMutation({
     onSuccess: () => {
       toast.success('Casino deleted');
@@ -44,6 +73,14 @@ export default function CasinosPage() {
     },
     onError: (error) => toast.error(error.message),
   });
+
+  const handleCreateCasino = () => {
+    if (!formData.name || !formData.brand || !formData.websiteUrl) {
+      toast.error('Please fill all required fields');
+      return;
+    }
+    createCasino.mutate(formData);
+  };
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
@@ -165,10 +202,98 @@ export default function CasinosPage() {
             Manage your casino brand partnerships
           </p>
         </div>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Casino
-        </Button>
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Casino
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add Casino</DialogTitle>
+              <DialogDescription>
+                Add a new casino brand partnership.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Name *</Label>
+                <Input
+                  placeholder="Lucky Casino"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Brand *</Label>
+                <Input
+                  placeholder="Lucky Gaming Ltd"
+                  value={formData.brand}
+                  onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Website URL *</Label>
+                <Input
+                  placeholder="https://luckycasino.com"
+                  value={formData.websiteUrl}
+                  onChange={(e) => setFormData({ ...formData, websiteUrl: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Risk Level</Label>
+                  <Select
+                    value={formData.riskLevel}
+                    onValueChange={(v) => setFormData({ ...formData, riskLevel: v as typeof formData.riskLevel })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Funnel Style</Label>
+                  <Select
+                    value={formData.funnelStyle}
+                    onValueChange={(v) => setFormData({ ...formData, funnelStyle: v as typeof formData.funnelStyle })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="direct">Direct</SelectItem>
+                      <SelectItem value="landing">Landing Page</SelectItem>
+                      <SelectItem value="chatbot">Chatbot</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Welcome Bonus</Label>
+                <Input
+                  placeholder="100% up to $500"
+                  value={formData.welcomeBonus}
+                  onChange={(e) => setFormData({ ...formData, welcomeBonus: e.target.value })}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCreateOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleCreateCasino} disabled={createCasino.isPending}>
+                {createCasino.isPending ? 'Creating...' : 'Add Casino'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">

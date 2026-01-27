@@ -16,6 +16,17 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -28,6 +39,14 @@ export default function ModelsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [tierFilter, setTierFilter] = useState<'bronze' | 'silver' | 'gold' | 'platinum' | 'all'>('all');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '',
+    username: '',
+    onlyfansUrl: '',
+    tier: 'bronze' as 'bronze' | 'silver' | 'gold' | 'platinum',
+    bio: '',
+  });
 
   const { data, isLoading, refetch } = trpc.model.list.useQuery({
     page,
@@ -38,6 +57,16 @@ export default function ModelsPage() {
 
   const { data: stats } = trpc.model.getStats.useQuery();
 
+  const createModel = trpc.model.create.useMutation({
+    onSuccess: () => {
+      toast.success('Model created successfully');
+      setCreateOpen(false);
+      setFormData({ name: '', username: '', onlyfansUrl: '', tier: 'bronze', bio: '' });
+      refetch();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   const deleteModel = trpc.model.delete.useMutation({
     onSuccess: () => {
       toast.success('Model deleted');
@@ -45,6 +74,14 @@ export default function ModelsPage() {
     },
     onError: (error) => toast.error(error.message),
   });
+
+  const handleCreateModel = () => {
+    if (!formData.name || !formData.username || !formData.onlyfansUrl) {
+      toast.error('Please fill all required fields');
+      return;
+    }
+    createModel.mutate(formData);
+  };
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
@@ -168,10 +205,81 @@ export default function ModelsPage() {
             Manage your OnlyFans model partnerships
           </p>
         </div>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Model
-        </Button>
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Model
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add OnlyFans Model</DialogTitle>
+              <DialogDescription>
+                Add a new model partnership to manage their campaigns.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Name *</Label>
+                <Input
+                  placeholder="Jane Doe"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Username *</Label>
+                <Input
+                  placeholder="janedoe"
+                  value={formData.username}
+                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>OnlyFans URL *</Label>
+                <Input
+                  placeholder="https://onlyfans.com/janedoe"
+                  value={formData.onlyfansUrl}
+                  onChange={(e) => setFormData({ ...formData, onlyfansUrl: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Tier</Label>
+                <Select
+                  value={formData.tier}
+                  onValueChange={(v) => setFormData({ ...formData, tier: v as typeof formData.tier })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bronze">Bronze</SelectItem>
+                    <SelectItem value="silver">Silver</SelectItem>
+                    <SelectItem value="gold">Gold</SelectItem>
+                    <SelectItem value="platinum">Platinum</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Bio</Label>
+                <Textarea
+                  placeholder="Short bio about the model..."
+                  value={formData.bio}
+                  onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCreateOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleCreateModel} disabled={createModel.isPending}>
+                {createModel.isPending ? 'Creating...' : 'Add Model'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">

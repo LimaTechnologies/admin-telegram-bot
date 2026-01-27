@@ -107,6 +107,14 @@ export const campaignRouter = router({
       return campaign.toObject();
     }),
 
+  // Get all active campaigns (for selection)
+  getActive: protectedProcedure.query(async () => {
+    const campaigns = await Campaign.find({ status: 'active' })
+      .sort({ name: 1 })
+      .select('_id name type');
+    return campaigns.map((c) => c.toObject());
+  }),
+
   // Create campaign (operator+)
   create: operatorProcedure
     .input(createCampaignSchema)

@@ -90,6 +90,14 @@ export const creativeRouter = router({
       return creative.toObject();
     }),
 
+  // Get all creatives (for selection)
+  getActive: protectedProcedure.query(async () => {
+    const creatives = await Creative.find({ isCompliant: true })
+      .sort({ name: 1 })
+      .select('_id name media.type');
+    return creatives.map((c) => c.toObject());
+  }),
+
   // Create creative (operator+)
   create: operatorProcedure
     .input(createCreativeSchema)

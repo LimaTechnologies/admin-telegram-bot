@@ -45,6 +45,34 @@
 - Use `.lean()` for read-only queries
 - Use `.toObject()` when returning to client (handled by tRPC)
 
+### Schema Default Values (IMPORTANT)
+Many schemas have automatic defaults that affect immediate query results:
+- **Group**: `settings: { isActive: true }` - New groups are active by default
+- **Creative**: `settings: { isCompliant: true }` - New creatives are compliant by default
+- **Campaign**: `status: 'draft'` - New campaigns start in draft
+- These defaults are returned immediately in getActive queries after creation
+- No need to explicitly set if creating with standard create mutation
+
+### 2027-01-27 Session Learnings
+
+#### Test Data Chain
+When testing campaign features, create data in this exact order:
+```
+Model → Group → Creative → Campaign → ScheduledPost
+```
+Each entity links to the previous, so:
+1. Create Model first (OnlyFans or Casino)
+2. Create Group next (links to Model via modelId)
+3. Create Creative next (links to Group via groupId)
+4. Create Campaign (links to Model + multiple Groups)
+5. Create ScheduledPost (links to Campaign + Creative + Group)
+
+#### Default Values Matter
+When debugging why entities appear/disappear in `getActive` queries:
+- Check schema defaults - they apply immediately
+- Example: Group created without `settings` will have `isActive: true` automatically
+- This affects `getActive` query results immediately after creation (no refetch needed)
+
 ### Key Schemas
 
 #### Campaign

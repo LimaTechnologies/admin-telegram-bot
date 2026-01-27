@@ -38,6 +38,12 @@ export default function CreativesPage() {
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   const [typeFilter, setTypeFilter] = useState<'image' | 'video' | 'text' | 'all'>('all');
+  const [formData, setFormData] = useState({
+    name: '',
+    mediaType: 'image' as 'image' | 'video' | 'text',
+    caption: '',
+    ctaStyle: 'soft' as 'soft' | 'hard',
+  });
 
   const { data, isLoading, refetch } = trpc.creative.list.useQuery({
     page,
@@ -53,6 +59,31 @@ export default function CreativesPage() {
     },
     onError: (error) => toast.error(error.message),
   });
+
+  const createCreative = trpc.creative.create.useMutation({
+    onSuccess: () => {
+      toast.success('Creative created successfully');
+      setCreateOpen(false);
+      setFormData({ name: '', mediaType: 'image', caption: '', ctaStyle: 'soft' });
+      refetch();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const handleCreateCreative = () => {
+    if (!formData.name || !formData.caption) {
+      toast.error('Please fill all required fields');
+      return;
+    }
+    createCreative.mutate({
+      name: formData.name,
+      media: {
+        type: formData.mediaType,
+      },
+      caption: formData.caption,
+      ctaStyle: formData.ctaStyle,
+    });
+  };
 
   const getMediaIcon = (type: string) => {
     switch (type) {
@@ -180,12 +211,19 @@ export default function CreativesPage() {
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label>Name</Label>
-                <Input placeholder="Summer Promo" />
+                <Label>Name *</Label>
+                <Input
+                  placeholder="Summer Promo"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Media Type</Label>
-                <Select defaultValue="image">
+                <Select
+                  value={formData.mediaType}
+                  onValueChange={(v) => setFormData({ ...formData, mediaType: v as 'image' | 'video' | 'text' })}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -197,12 +235,20 @@ export default function CreativesPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Caption</Label>
-                <Textarea placeholder="Write your ad caption..." rows={4} />
+                <Label>Caption *</Label>
+                <Textarea
+                  placeholder="Write your ad caption..."
+                  rows={4}
+                  value={formData.caption}
+                  onChange={(e) => setFormData({ ...formData, caption: e.target.value })}
+                />
               </div>
               <div className="space-y-2">
                 <Label>CTA Style</Label>
-                <Select defaultValue="soft">
+                <Select
+                  value={formData.ctaStyle}
+                  onValueChange={(v) => setFormData({ ...formData, ctaStyle: v as 'soft' | 'hard' })}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -217,7 +263,9 @@ export default function CreativesPage() {
               <Button variant="outline" onClick={() => setCreateOpen(false)}>
                 Cancel
               </Button>
-              <Button>Create Creative</Button>
+              <Button onClick={handleCreateCreative} disabled={createCreative.isPending}>
+                {createCreative.isPending ? 'Creating...' : 'Create Creative'}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

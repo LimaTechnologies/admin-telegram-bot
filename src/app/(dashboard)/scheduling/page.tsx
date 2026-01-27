@@ -2,12 +2,64 @@
 
 import { useState } from 'react';
 import { Calendar, Clock, Plus, AlertTriangle } from 'lucide-react';
+import { trpc } from '@/lib/trpc/client';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { toast } from 'sonner';
 
 export default function SchedulingPage() {
   const [selectedDate] = useState(new Date());
+  const [createOpen, setCreateOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    campaignId: '',
+    creativeId: '',
+    groupId: '',
+    scheduledFor: '',
+  });
+
+  // Fetch data for selects
+  const { data: campaigns } = trpc.campaign.getActive.useQuery();
+  const { data: creatives } = trpc.creative.getActive.useQuery();
+  const { data: groups } = trpc.group.getActive.useQuery();
+
+  const createScheduledPost = trpc.scheduledPost.create.useMutation({
+    onSuccess: () => {
+      toast.success('Post scheduled successfully');
+      setCreateOpen(false);
+      setFormData({ campaignId: '', creativeId: '', groupId: '', scheduledFor: '' });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const handleCreatePost = () => {
+    if (!formData.campaignId || !formData.creativeId || !formData.groupId || !formData.scheduledFor) {
+      toast.error('Please fill all required fields');
+      return;
+    }
+    createScheduledPost.mutate({
+      ...formData,
+      scheduledFor: new Date(formData.scheduledFor).toISOString(),
+    });
+  };
 
   const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const hours = Array.from({ length: 24 }, (_, i) => i);
@@ -29,10 +81,94 @@ export default function SchedulingPage() {
             Plan and schedule your ad posts
           </p>
         </div>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Schedule Post
-        </Button>
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              Schedule Post
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Schedule New Post</DialogTitle>
+              <DialogDescription>
+                Schedule a post to be sent at a specific time.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Campaign *</Label>
+                <Select
+                  value={formData.campaignId}
+                  onValueChange={(v) => setFormData({ ...formData, campaignId: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select campaign" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {campaigns?.map((c) => (
+                      <SelectItem key={String(c._id)} value={String(c._id)}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Creative *</Label>
+                <Select
+                  value={formData.creativeId}
+                  onValueChange={(v) => setFormData({ ...formData, creativeId: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select creative" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {creatives?.map((c) => (
+                      <SelectItem key={String(c._id)} value={String(c._id)}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Group *</Label>
+                <Select
+                  value={formData.groupId}
+                  onValueChange={(v) => setFormData({ ...formData, groupId: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select group" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {groups?.map((g) => (
+                      <SelectItem key={String(g._id)} value={String(g._id)}>
+                        {g.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Scheduled For *</Label>
+                <Input
+                  type="datetime-local"
+                  value={formData.scheduledFor}
+                  onChange={(e) => setFormData({ ...formData, scheduledFor: e.target.value })}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCreateOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleCreatePost} disabled={createScheduledPost.isPending}>
+                {createScheduledPost.isPending ? 'Scheduling...' : 'Schedule Post'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">

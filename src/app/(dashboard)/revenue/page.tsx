@@ -15,6 +15,16 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -27,6 +37,13 @@ export default function RevenuePage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [typeFilter, setTypeFilter] = useState<'onlyfans' | 'casino' | 'all'>('all');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '',
+    type: 'onlyfans' as 'onlyfans' | 'casino',
+    revenueModel: 'flat_fee' as 'flat_fee' | 'cpm' | 'cpc' | 'rev_share',
+    amount: '',
+  });
 
   const { data, isLoading, refetch } = trpc.deal.list.useQuery({
     page,
@@ -37,6 +54,16 @@ export default function RevenuePage() {
 
   const { data: stats } = trpc.deal.getStats.useQuery();
 
+  const createDeal = trpc.deal.create.useMutation({
+    onSuccess: () => {
+      toast.success('Deal created successfully');
+      setCreateOpen(false);
+      setFormData({ name: '', type: 'onlyfans', revenueModel: 'flat_fee', amount: '' });
+      refetch();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   const deleteDeal = trpc.deal.delete.useMutation({
     onSuccess: () => {
       toast.success('Deal deleted');
@@ -44,6 +71,23 @@ export default function RevenuePage() {
     },
     onError: (error) => toast.error(error.message),
   });
+
+  const handleCreateDeal = () => {
+    if (!formData.name || !formData.amount) {
+      toast.error('Please fill all required fields');
+      return;
+    }
+    createDeal.mutate({
+      name: formData.name,
+      type: formData.type,
+      terms: {
+        revenueModel: formData.revenueModel,
+        amount: parseFloat(formData.amount),
+        currency: 'USD',
+      },
+      startDate: new Date().toISOString(),
+    });
+  };
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
@@ -165,10 +209,83 @@ export default function RevenuePage() {
             Track your monetization and deals
           </p>
         </div>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          New Deal
-        </Button>
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              New Deal
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create New Deal</DialogTitle>
+              <DialogDescription>
+                Create a new revenue deal with a model or casino.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Deal Name *</Label>
+                <Input
+                  placeholder="Summer Promo Deal"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Type</Label>
+                  <Select
+                    value={formData.type}
+                    onValueChange={(v) => setFormData({ ...formData, type: v as typeof formData.type })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="onlyfans">OnlyFans</SelectItem>
+                      <SelectItem value="casino">Casino</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Revenue Model</Label>
+                  <Select
+                    value={formData.revenueModel}
+                    onValueChange={(v) => setFormData({ ...formData, revenueModel: v as typeof formData.revenueModel })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="flat_fee">Flat Fee</SelectItem>
+                      <SelectItem value="cpm">CPM</SelectItem>
+                      <SelectItem value="cpc">CPC</SelectItem>
+                      <SelectItem value="rev_share">Revenue Share</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Amount (USD) *</Label>
+                <Input
+                  type="number"
+                  placeholder="1000"
+                  value={formData.amount}
+                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCreateOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleCreateDeal} disabled={createDeal.isPending}>
+                {createDeal.isPending ? 'Creating...' : 'Create Deal'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">

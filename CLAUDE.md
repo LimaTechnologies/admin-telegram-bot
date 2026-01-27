@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** fix/queue-names
+**Branch:** feature/modal-crud-functionality
 **Date:** 2026-01-27
-**Summary:** Fixed BullMQ queue names (removed colons) and added dev bypass auth for first admin (joaovitor_rlima@hotmail.com).
+**Summary:** Fixed modal CRUD functionality across dashboard pages. Added formData state, mutations, and handlers to Groups, Creatives, Models, Casinos, Revenue/Deals, and Scheduling pages. Created campaigns/new page for campaign creation. All modals now properly save data to MongoDB.
 
 ---
 

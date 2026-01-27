@@ -38,6 +38,11 @@ export default function GroupsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    telegramId: '',
+    name: '',
+    type: 'supergroup' as 'public' | 'private' | 'supergroup' | 'channel',
+  });
 
   const { data, isLoading, refetch } = trpc.group.list.useQuery({
     page,
@@ -56,6 +61,30 @@ export default function GroupsPage() {
       toast.error(error.message);
     },
   });
+
+  const createGroup = trpc.group.create.useMutation({
+    onSuccess: () => {
+      toast.success('Group created successfully');
+      setCreateOpen(false);
+      setFormData({ telegramId: '', name: '', type: 'supergroup' });
+      refetch();
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const handleCreateGroup = () => {
+    if (!formData.telegramId || !formData.name) {
+      toast.error('Please fill all required fields');
+      return;
+    }
+    createGroup.mutate({
+      telegramId: formData.telegramId,
+      name: formData.name,
+      type: formData.type,
+    });
+  };
 
   const formatNumber = (num: number) =>
     new Intl.NumberFormat('en-US', { notation: 'compact' }).format(num);
@@ -169,16 +198,27 @@ export default function GroupsPage() {
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label>Telegram Group ID</Label>
-                <Input placeholder="-1001234567890" />
+                <Label>Telegram Group ID *</Label>
+                <Input
+                  placeholder="-1001234567890"
+                  value={formData.telegramId}
+                  onChange={(e) => setFormData({ ...formData, telegramId: e.target.value })}
+                />
               </div>
               <div className="space-y-2">
-                <Label>Group Name</Label>
-                <Input placeholder="Crypto Traders" />
+                <Label>Group Name *</Label>
+                <Input
+                  placeholder="Crypto Traders"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Type</Label>
-                <Select defaultValue="supergroup">
+                <Select
+                  value={formData.type}
+                  onValueChange={(v) => setFormData({ ...formData, type: v as 'public' | 'private' | 'supergroup' | 'channel' })}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -195,7 +235,9 @@ export default function GroupsPage() {
               <Button variant="outline" onClick={() => setCreateOpen(false)}>
                 Cancel
               </Button>
-              <Button>Add Group</Button>
+              <Button onClick={handleCreateGroup} disabled={createGroup.isPending}>
+                {createGroup.isPending ? 'Adding...' : 'Add Group'}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
