@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -33,6 +34,7 @@ type LoginForm = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const [sent, setSent] = useState(false);
+  const router = useRouter();
 
   const form = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
@@ -40,7 +42,14 @@ export default function LoginPage() {
   });
 
   const sendMagicLink = trpc.auth.sendMagicLink.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Check if this was a direct login (dev bypass)
+      if ('directLogin' in data && data.directLogin) {
+        toast.success('Logged in successfully!');
+        router.push('/groups');
+        return;
+      }
+      // Normal magic link flow
       setSent(true);
       toast.success('Check your email for the login link');
     },

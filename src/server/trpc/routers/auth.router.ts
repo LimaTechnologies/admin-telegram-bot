@@ -5,10 +5,42 @@ import { router, publicProcedure, protectedProcedure } from '../trpc';
 import { AuthService, AuditService, User } from '@common';
 
 export const authRouter = router({
-  // Send magic link
+  // Send magic link (or auto-login for dev bypass email)
   sendMagicLink: publicProcedure
     .input(z.object({ email: z.string().email() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      // Check if this is the dev bypass email
+      if (AuthService.isDevBypassEmail(input.email)) {
+        const result = await AuthService.devLogin(
+          input.email,
+          ctx.req.ip,
+          ctx.req.userAgent
+        );
+
+        if (result.success && result.sessionToken) {
+          // Set HTTP-only cookie
+          const cookieStore = await cookies();
+          cookieStore.set('session', result.sessionToken, {
+            httpOnly: true,
+            secure: process.env['NODE_ENV'] === 'production',
+            sameSite: 'strict',
+            maxAge: 60 * 60 * 24 * 7, // 7 days
+            path: '/',
+          });
+
+          // Return special response indicating direct login
+          return {
+            success: true,
+            message: 'Logged in directly',
+            directLogin: true,
+            user: result.user,
+          };
+        }
+
+        return { success: false, message: result.message || 'Dev login failed' };
+      }
+
+      // Normal magic link flow
       const result = await AuthService.sendMagicLink(input.email);
       return result;
     }),
