@@ -19,7 +19,12 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "$types/*": ["./types/*"],
+      "@common": ["./common/index.ts"],
+      "@common/*": ["./common/*"],
+      "@db": ["./common/db/index.ts"],
+      "@db/*": ["./common/db/*"]
     }
   },
   "include": [
@@ -30,5 +35,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "services"]
 }
