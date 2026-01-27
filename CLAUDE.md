@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** feature/dev-auth-bypass
+**Branch:** fix/queue-names
 **Date:** 2026-01-27
-**Summary:** Added dev bypass authentication for first admin user (joaovitor_rlima@hotmail.com) - auto-creates admin and logs in directly without email service.
+**Summary:** Fixed BullMQ queue names (removed colons) and added dev bypass auth for first admin (joaovitor_rlima@hotmail.com).
 
 ---
 
