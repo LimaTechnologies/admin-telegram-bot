@@ -6,15 +6,25 @@
 
 ## Last Change
 
-**Branch:** main
-**Date:** YYYY-MM-DD
-**Summary:** Initial setup with start-vibing.
+**Branch:** master
+**Date:** 2026-01-26
+**Summary:** Completed Telegram Ads Management Dashboard with all 13 dashboard pages, tRPC API, MongoDB models, BullMQ queues, grammY bot, and magic link authentication.
 
 ---
 
 ## 30 Seconds Overview
 
-UPDATE THIS WITH YOUR PROJECT DESCRIPTION
+**Telegram Ads Management Dashboard** - A central control panel to manage advertising campaigns on Telegram groups for OnlyFans models and casino brands.
+
+**Key Features:**
+- Campaign management with scheduling and rotation
+- Creative library with A/B testing
+- Revenue tracking and deal management
+- Analytics with performance metrics
+- Spam controls and safety measures
+- Audit logging for all actions
+- Queue monitoring for background jobs
+- Magic link authentication
 
 ---
 
@@ -22,14 +32,18 @@ UPDATE THIS WITH YOUR PROJECT DESCRIPTION
 
 | Component  | Technology                 |
 | ---------- | -------------------------- |
-| Runtime    | Bun / Node.js              |
+| Runtime    | Bun                        |
+| Framework  | Next.js 15 + React 19      |
 | Language   | TypeScript **strict mode** |
-| Validation | Zod                        |
+| API        | tRPC                       |
 | Database   | MongoDB + Mongoose         |
+| Queue      | BullMQ + Redis             |
+| Bot        | grammY (Telegram)          |
+| Auth       | Magic Link + HTTP-only     |
+| UI         | shadcn/ui + Tailwind v4    |
+| Charts     | Recharts                   |
 | Testing    | Vitest + Playwright        |
-| UI         | React + Tailwind + shadcn  |
-| Data       | TanStack Query + Sonner    |
-| Forms      | react-hook-form + Zod      |
+| Container  | Docker Compose             |
 
 ---
 
@@ -38,32 +52,41 @@ UPDATE THIS WITH YOUR PROJECT DESCRIPTION
 ```
 project-root/
 ├── CLAUDE.md              # THIS FILE - project rules (40k char max)
-├── .claude/
-│   ├── agents/            # 82 specialized agents in 14 categories
-│   ├── hooks/             # stop-validator, user-prompt-submit
-│   ├── scripts/           # validation scripts
-│   ├── skills/            # 22 skill systems
-│   └── config/            # project configuration
+├── .claude/               # Claude Code configuration
+├── common/                # Shared across services
+│   ├── db/                # MongoDB connection
+│   ├── models/            # Mongoose schemas (14 models)
+│   ├── queue/             # BullMQ setup
+│   └── services/          # Auth, Email, Audit services
+├── services/
+│   ├── bot/               # Telegram Bot (grammY)
+│   └── worker/            # BullMQ Workers
 ├── src/
-│   ├── app/               # Next.js app router
-│   │   ├── (marketing)/   # Route group - public pages
-│   │   ├── (app)/         # Route group - authenticated
-│   │   │   └── dashboard/
-│   │   │       ├── page.tsx
-│   │   │       └── _components/  # Page-specific components
-│   │   ├── layout.tsx     # Root layout with providers
-│   │   └── loading.tsx    # Global loading skeleton
+│   ├── app/
+│   │   ├── (auth)/        # Login/Verify pages
+│   │   ├── (dashboard)/   # Protected dashboard pages (13 pages)
+│   │   │   ├── page.tsx           # Overview
+│   │   │   ├── groups/            # Telegram Groups
+│   │   │   ├── campaigns/         # Campaign Manager
+│   │   │   ├── creatives/         # Creative Library
+│   │   │   ├── scheduling/        # Calendar + Rotation
+│   │   │   ├── revenue/           # Deals + Revenue
+│   │   │   ├── analytics/         # Performance
+│   │   │   ├── models/            # OnlyFans Models
+│   │   │   ├── casinos/           # Casino Brands
+│   │   │   ├── spam-controls/     # Safety Controls
+│   │   │   ├── reports/           # Exports
+│   │   │   ├── audit-logs/        # Activity Logs
+│   │   │   └── queue-monitor/     # Queue Status
+│   │   └── api/trpc/      # tRPC API route
 │   ├── components/
 │   │   ├── ui/            # shadcn primitives
-│   │   ├── layout/        # Header, Sidebar, Footer
-│   │   ├── shared/        # Cross-feature components
-│   │   └── providers.tsx  # Context providers (client)
-│   └── lib/
-│       ├── utils.ts       # cn utility (MANDATORY)
-│       └── api/           # axios instances
-├── types/                 # ALL TypeScript interfaces (MANDATORY)
-├── tests/                 # Test files
-└── docs/                  # Documentation
+│   │   ├── layout/        # Sidebar, Header
+│   │   └── shared/        # DataTable, StatsCard
+│   ├── lib/trpc/          # tRPC client
+│   └── server/trpc/       # tRPC routers (12 routers)
+├── types/                 # TypeScript interfaces
+└── docker-compose.yml     # Docker services
 ```
 
 ---
