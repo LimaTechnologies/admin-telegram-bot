@@ -1,0 +1,46 @@
+{
+	"$comment": "Quality gate commands. Agents use these to run checks.",
+
+	"gates": {
+		"typecheck": {
+			"command": "bun run typecheck",
+			"description": "TypeScript type checking",
+			"required": true,
+			"order": 1
+		},
+		"lint": {
+			"command": "bun run lint",
+			"description": "ESLint code linting",
+			"required": true,
+			"order": 2
+		},
+		"unitTests": {
+			"command": "bun run test",
+			"description": "Unit tests with Vitest",
+			"required": true,
+			"order": 3
+		},
+		"e2eTests": {
+			"command": "bun run test:e2e",
+			"description": "E2E tests with Playwright",
+			"required": false,
+			"order": 4
+		},
+		"build": {
+			"command": "bun run build",
+			"description": "Production build",
+			"required": true,
+			"order": 5
+		},
+		"dockerBuild": {
+			"command": "docker compose build",
+			"description": "Docker image build",
+			"required": false,
+			"order": 6
+		}
+	},
+
+	"runAll": "bun run typecheck && bun run lint && bun run test && bun run build",
+
+	"skipGatesForTypes": ["config", "docs"]
+}

@@ -1,0 +1,53 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$comment": "Project-specific configuration. Agents read this to adapt to your project.",
+
+	"stack": {
+		"runtime": "bun",
+		"language": "typescript",
+		"strictMode": true,
+		"database": "mongodb",
+		"orm": "mongoose",
+		"validation": "zod",
+		"container": "docker"
+	},
+
+	"structure": {
+		"apps": "apps/",
+		"shared": "common/",
+		"types": "types/",
+		"tests": "tests/",
+		"docs": "docs/"
+	},
+
+	"pathAliases": {
+		"$types/*": "./types/*",
+		"@common/*": "./common/*",
+		"@common": "./common/index.ts",
+		"@db/*": "./common/db/*",
+		"@db": "./common/db/index.ts",
+		"@apps/*": "./apps/*"
+	},
+
+	"commands": {
+		"typecheck": "bun run typecheck",
+		"lint": "bun run lint",
+		"test": "bun run test",
+		"testE2e": "bun run test:e2e",
+		"build": "bun run build",
+		"dev": "bun run dev",
+		"dockerBuild": "docker compose build",
+		"dockerUp": "docker compose up"
+	},
+
+	"conventions": {
+		"branchPrefix": {
+			"feature": "feature/",
+			"bugfix": "fix/",
+			"refactor": "refactor/"
+		},
+		"commitFormat": "conventional",
+		"typesLocation": "types/",
+		"noTypesInSrc": true
+	}
+}

@@ -1,0 +1,280 @@
+{
+	"model": "claude-opus-4-5-20251101",
+	"max_tokens": 8192,
+	"max_turns": 100,
+
+	"context": {
+		"compaction_threshold": 0.85,
+		"enable_compaction": true,
+		"enable_semantic_search": true,
+		"memory_files": [".claude/CLAUDE.md", "claude.md"]
+	},
+
+	"permissions": {
+		"mode": "strict",
+		"allowed_tools": [
+			"file_read",
+			"file_write",
+			"file_edit",
+			"bash_grep",
+			"bash_find",
+			"bash_ls",
+			"bash_bun",
+			"bash_git",
+			"web_search"
+		],
+		"disallowed_tools": [
+			"bash_rm_rf",
+			"bash_sudo",
+			"bash_chmod",
+			"bash_chown",
+			"file_delete_recursive"
+		],
+		"allowed_directories": [
+			".",
+			"app",
+			"components",
+			"lib",
+			"server",
+			"tests",
+			"docs",
+			"types",
+			".claude"
+		],
+		"protected_files": [".env", ".env.local", ".env.production", "bun.lockb"],
+		"allow": [
+			"Bash(bun run typecheck:*)",
+			"Bash(git add:*)",
+			"Bash(git commit:*)",
+			"Bash(python .claude/hooks/*)",
+			"Bash(bun .claude/hooks/*)",
+			"Bash(bun .claude/scripts/*)",
+			"Bash(claude mcp:*)"
+		]
+	},
+
+	"hooks": {
+		"UserPromptSubmit": [
+			{
+				"matcher": "",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "npx tsx .claude/hooks/run-hook.ts user-prompt-submit",
+						"timeout": 10
+					}
+				]
+			}
+		],
+		"Stop": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "npx tsx .claude/hooks/run-hook.ts stop-validator",
+						"timeout": 30
+					}
+				]
+			}
+		]
+	},
+
+	"agents": {
+		"orchestrator": {
+			"file": "agents/orchestrator.md",
+			"description": "Coordena todo o fluxo de desenvolvimento",
+			"priority": 1
+		},
+		"analyzer": {
+			"file": "agents/analyzer.md",
+			"description": "Analisa impacto de mudancas",
+			"priority": 2
+		},
+		"research": {
+			"file": "agents/research.md",
+			"description": "Pesquisa best practices e solucoes recentes (2024-2025) antes da implementacao",
+			"priority": 3
+		},
+		"documenter": {
+			"file": "agents/documenter.md",
+			"description": "Cria e mantem documentacao",
+			"priority": 3
+		},
+		"code-reviewer": {
+			"file": "agents/code-reviewer.md",
+			"description": "Reviews code for patterns, readability, maintainability. Runs after implementation, before tester.",
+			"priority": 4
+		},
+		"tester": {
+			"file": "agents/tester.md",
+			"description": "Cria e executa testes",
+			"priority": 5
+		},
+		"debugger": {
+			"file": "agents/debugger.md",
+			"description": "Traces bugs to root cause. AUTOMATICALLY invoke when: errors, exceptions, 'bug', 'not working', 'broken'.",
+			"priority": 5
+		},
+		"performance": {
+			"file": "agents/performance.md",
+			"description": "Profiles and optimizes code. AUTOMATICALLY invoke when: 'slow', 'optimize', 'performance', bundle size issues.",
+			"priority": 5
+		},
+		"security-auditor": {
+			"file": "agents/security-auditor.md",
+			"description": "Audita seguranca do codigo",
+			"priority": 6,
+			"can_veto": true
+		},
+		"ui-ux-reviewer": {
+			"file": "agents/ui-ux-reviewer.md",
+			"description": "Revisa UI/UX e pesquisa competidores",
+			"priority": 7
+		},
+		"quality-checker": {
+			"file": "agents/quality-checker.md",
+			"description": "Verifica qualidade (typecheck, lint, build)",
+			"priority": 8
+		},
+		"final-validator": {
+			"file": "agents/final-validator.md",
+			"description": "Validacao final antes do commit",
+			"priority": 9,
+			"can_veto": true
+		},
+		"commit-manager": {
+			"file": "agents/commit-manager.md",
+			"description": "Manages commits and workflow state tracking",
+			"priority": 10
+		},
+		"domain-updater": {
+			"file": "agents/domain-updater.md",
+			"description": "Updates domain documentation with session learnings and problems solved. FINAL step after commit.",
+			"priority": 11
+		},
+		"claude-md-compactor": {
+			"file": "agents/07-documentation/claude-md-compactor.md",
+			"description": "Compacts CLAUDE.md when it exceeds 40k chars. Uses research + template to intelligently reduce size while preserving critical knowledge.",
+			"priority": 12
+		}
+	},
+
+	"workflow": {
+		"default_flow": [
+			"analyzer",
+			"research",
+			"ui-ux-reviewer",
+			"code-reviewer",
+			"tester",
+			"security-auditor",
+			"quality-checker",
+			"documenter",
+			"final-validator",
+			"domain-updater",
+			"commit-manager"
+		],
+		"bug_fix_flow": [
+			"analyzer",
+			"debugger",
+			"research",
+			"code-reviewer",
+			"tester",
+			"security-auditor",
+			"quality-checker",
+			"documenter",
+			"final-validator",
+			"domain-updater",
+			"commit-manager"
+		],
+		"performance_flow": [
+			"analyzer",
+			"performance",
+			"code-reviewer",
+			"tester",
+			"quality-checker",
+			"documenter",
+			"final-validator",
+			"domain-updater",
+			"commit-manager"
+		],
+		"refactor_flow": [
+			"analyzer",
+			"code-reviewer",
+			"tester",
+			"security-auditor",
+			"quality-checker",
+			"documenter",
+			"final-validator",
+			"domain-updater",
+			"commit-manager"
+		],
+		"config_flow": ["quality-checker", "domain-updater", "commit-manager"]
+	},
+
+	"rules": {
+		"research": {
+			"required_before_implementation": true,
+			"sources_must_be_recent": "2024-2025",
+			"must_document_findings": true,
+			"must_cite_sources": true
+		},
+		"typescript": {
+			"strict": true,
+			"no_any": true,
+			"explicit_return_types": true
+		},
+		"security": {
+			"user_id_from_session_only": true,
+			"sanitize_all_responses": true,
+			"zod_validation_required": true,
+			"explicit_select_required": true,
+			"owasp_validation_required": true,
+			"cve_check_required": true
+		},
+		"ux": {
+			"skeleton_required_for_async": true,
+			"touch_friendly_min_size": "44px",
+			"competitor_research_required": true,
+			"wcag_compliance_required": true
+		},
+		"testing": {
+			"unit_tests_required": true,
+			"e2e_for_ui_features": true,
+			"data_testid_required": true,
+			"edge_cases_research_required": true
+		},
+		"documentation": {
+			"flow_docs_required": true,
+			"competitor_research_for_ui": true,
+			"research_must_be_documented": true
+		}
+	},
+
+	"quality_gates": {
+		"typecheck": {
+			"command": "bun run typecheck",
+			"required": true,
+			"blocking": true
+		},
+		"lint": {
+			"command": "bun run lint",
+			"required": true,
+			"blocking": true
+		},
+		"test": {
+			"command": "bun run test",
+			"required": true,
+			"blocking": true
+		},
+		"test_e2e": {
+			"command": "bun run test:e2e",
+			"required": "when_ui_changes",
+			"blocking": true
+		},
+		"build": {
+			"command": "bun run build",
+			"required": true,
+			"blocking": true
+		}
+	}
+}

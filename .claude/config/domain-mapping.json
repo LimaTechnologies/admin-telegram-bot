@@ -1,0 +1,138 @@
+{
+	"$schema": "Domain mapping - maps file patterns to documentation domains",
+	"domains": {
+		"authentication": {
+			"patterns": [
+				"**/auth/**",
+				"**/login/**",
+				"**/session/**",
+				"**/*auth*.ts",
+				"**/*login*.ts",
+				"**/*session*.ts",
+				"**/middleware/auth*"
+			],
+			"description": "User authentication, sessions, tokens, login/logout flows"
+		},
+		"api": {
+			"patterns": [
+				"**/api/**",
+				"**/trpc/**",
+				"**/routers/**",
+				"**/*.router.ts",
+				"**/server/routes/**"
+			],
+			"description": "API endpoints, tRPC routers, REST routes"
+		},
+		"database": {
+			"patterns": [
+				"**/models/**",
+				"**/schemas/**",
+				"**/*.model.ts",
+				"**/*.schema.ts",
+				"**/db/**",
+				"**/migrations/**"
+			],
+			"description": "Database models, schemas, migrations, queries"
+		},
+		"ui-components": {
+			"patterns": [
+				"**/components/**/*.tsx",
+				"**/components/**/*.jsx",
+				"**/ui/**/*.tsx"
+			],
+			"description": "Reusable UI components (buttons, forms, modals, etc.)"
+		},
+		"pages": {
+			"patterns": [
+				"**/app/**/page.tsx",
+				"**/app/**/layout.tsx",
+				"**/pages/**/*.tsx"
+			],
+			"description": "Page routes and layouts (Next.js app router)"
+		},
+		"hooks": {
+			"patterns": [
+				"**/hooks/**/*.ts",
+				"**/use*.ts",
+				"**/use*.tsx"
+			],
+			"description": "React hooks and custom hook utilities"
+		},
+		"utilities": {
+			"patterns": [
+				"**/lib/**/*.ts",
+				"**/utils/**/*.ts",
+				"**/helpers/**/*.ts",
+				"**/common/**/*.ts"
+			],
+			"description": "Utility functions, helpers, shared logic"
+		},
+		"types": {
+			"patterns": [
+				"**/types/**/*.ts",
+				"**/*.d.ts",
+				"**/interfaces/**/*.ts"
+			],
+			"description": "TypeScript type definitions and interfaces"
+		},
+		"validation": {
+			"patterns": [
+				"**/validators/**/*.ts",
+				"**/*.validator.ts",
+				"**/*.schema.ts"
+			],
+			"description": "Zod schemas and input validation"
+		},
+		"testing": {
+			"patterns": [
+				"**/*.test.ts",
+				"**/*.spec.ts",
+				"**/*.e2e.ts",
+				"**/tests/**",
+				"**/e2e/**",
+				"**/fixtures/**"
+			],
+			"description": "Unit tests, integration tests, E2E tests"
+		},
+		"infrastructure": {
+			"patterns": [
+				"**/docker*",
+				"**/Dockerfile*",
+				"**/docker-compose*",
+				"**/.github/**",
+				"**/ci/**",
+				"**/scripts/**"
+			],
+			"description": "Docker, CI/CD, deployment scripts"
+		},
+		"claude-system": {
+			"patterns": [
+				".claude/**",
+				"CLAUDE.md",
+				"**/start-vibing/**"
+			],
+			"description": "Claude agent system, hooks, skills, configuration"
+		}
+	},
+	"rules": {
+		"createDomainWhen": [
+			"New file pattern not matching any existing domain",
+			"New feature area with 3+ related files",
+			"Explicit user request for domain separation"
+		],
+		"updateDomainWhen": [
+			"ANY file in domain is modified",
+			"New file added to domain",
+			"File deleted from domain",
+			"Connection to other domain changes"
+		],
+		"domainFileLocation": ".claude/skills/codebase-knowledge/domains/",
+		"requiredSections": [
+			"Last Update",
+			"Files",
+			"Connections",
+			"Recent Commits",
+			"Attention Points"
+		]
+	}
+}

@@ -1,0 +1,164 @@
+{
+	"$comment": "Testing configuration. Used by tester agent.",
+
+	"framework": {
+		"unit": "vitest",
+		"e2e": "playwright",
+		"version": "1.40+"
+	},
+
+	"paths": {
+		"unitTests": "tests/unit/*.test.ts",
+		"e2eTests": "tests/e2e/**/*.spec.ts",
+		"fixtures": "tests/e2e/fixtures/",
+		"pages": "tests/e2e/pages/",
+		"flows": "tests/e2e/flows/",
+		"api": "tests/e2e/api/",
+		"authState": "tests/e2e/.auth/"
+	},
+
+	"viewports": {
+		"desktop": {
+			"device": "Desktop Chrome",
+			"width": 1280,
+			"height": 800,
+			"required": true
+		},
+		"tablet": {
+			"device": "iPad",
+			"width": 768,
+			"height": 1024,
+			"required": true
+		},
+		"mobile": {
+			"device": "iPhone SE",
+			"width": 375,
+			"height": 667,
+			"required": true
+		},
+		"mobileLarge": {
+			"device": "iPhone 14",
+			"width": 390,
+			"height": 844,
+			"required": false
+		}
+	},
+
+	"auth": {
+		"storageStatePath": "tests/e2e/.auth/user.json",
+		"loginPage": "/auth/login",
+		"registerPage": "/auth/register",
+		"protectedPrefix": "/app",
+		"setupProject": "setup",
+		"reuseSession": true
+	},
+
+	"database": {
+		"type": "mongodb",
+		"testConnectionEnv": "MONGODB_URI",
+		"cleanupStrategy": "fixture-tracking",
+		"verifyAfterActions": true
+	},
+
+	"cleanup": {
+		"strategy": "fixture-based",
+		"trackCreatedIds": true,
+		"deleteOnlyTracked": true,
+		"cleanupOnFailure": true,
+		"collections": ["users", "items", "sessions"]
+	},
+
+	"dataTestIds": {
+		"form": {
+			"nameInput": "name-input",
+			"emailInput": "email-input",
+			"passwordInput": "password-input",
+			"confirmPasswordInput": "confirm-password-input",
+			"submitButton": "submit-button"
+		},
+		"feedback": {
+			"errorMessage": "error-message",
+			"successMessage": "success-message",
+			"loadingSpinner": "loading-spinner"
+		},
+		"navigation": {
+			"sidebar": "sidebar",
+			"hamburgerMenu": "hamburger-menu",
+			"mobileNav": "mobile-nav",
+			"logoutButton": "logout-button"
+		},
+		"actions": {
+			"deleteButton": "delete-button",
+			"editButton": "edit-button",
+			"confirmDelete": "confirm-delete",
+			"cancelButton": "cancel-button"
+		}
+	},
+
+	"api": {
+		"rest": {
+			"baseUrl": "/api",
+			"authEndpoint": "/api/auth/login",
+			"validateInput": true,
+			"requireAuth": true
+		},
+		"trpc": {
+			"baseUrl": "/api/trpc",
+			"batchEnabled": true,
+			"validateInput": true
+		}
+	},
+
+	"security": {
+		"testForbiddenRequests": true,
+		"testRateLimiting": true,
+		"testCrossUserAccess": true,
+		"testUnauthenticated": true,
+		"expectedForbiddenStatus": 403,
+		"expectedUnauthorizedStatus": 401,
+		"expectedRateLimitStatus": 429
+	},
+
+	"flows": {
+		"required": [
+			"registration",
+			"login",
+			"logout",
+			"crud-create",
+			"crud-read",
+			"crud-update",
+			"crud-delete",
+			"permissions"
+		],
+		"optional": ["password-reset", "email-verification", "profile-update"]
+	},
+
+	"commands": {
+		"install": "bun add -D @playwright/test && bunx playwright install",
+		"run": "bunx playwright test",
+		"runUi": "bunx playwright test --ui",
+		"runHeaded": "bunx playwright test --headed",
+		"runMobile": "bunx playwright test --project='iPhone SE'",
+		"debug": "bunx playwright test --debug",
+		"report": "bunx playwright show-report",
+		"codegen": "bunx playwright codegen"
+	},
+
+	"rules": {
+		"noSkip": true,
+		"noMockAuth": true,
+		"requireCleanup": true,
+		"requireDbValidation": true,
+		"requireViewportTests": true,
+		"requireDataTestId": true,
+		"uniqueTestData": true,
+		"timestampEmails": true
+	},
+
+	"reporting": {
+		"trace": "on-first-retry",
+		"screenshot": "only-on-failure",
+		"video": "retain-on-failure",
+		"outputFolder": "test-results"
+	}
+}

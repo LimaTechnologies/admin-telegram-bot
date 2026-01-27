@@ -1,0 +1,344 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$comment": "MCP Server Configuration - Recommended servers based on project stack and security review",
+
+	"metadata": {
+		"version": "1.0.0",
+		"lastUpdated": "2025-01-04",
+		"researchSources": [
+			"https://modelcontextprotocol.io/specification/2025-11-25",
+			"https://registry.modelcontextprotocol.io",
+			"https://github.com/modelcontextprotocol/servers",
+			"https://github.com/punkpeye/awesome-mcp-servers",
+			"https://docs.docker.com/ai/mcp-catalog-and-toolkit/catalog/"
+		]
+	},
+
+	"tiers": {
+		"core": {
+			"description": "Essential MCPs for daily development - Must install",
+			"servers": [
+				"github",
+				"nextjs-devtools",
+				"mongodb",
+				"playwright",
+				"context7",
+				"sequential-thinking"
+			]
+		},
+		"productivity": {
+			"description": "Enhanced productivity and monitoring",
+			"servers": ["sentry", "figma", "brave-search", "memory", "time"]
+		},
+		"infrastructure": {
+			"description": "DevOps and infrastructure tools",
+			"servers": ["docker-hub", "upstash", "fetch"]
+		}
+	},
+
+	"servers": {
+		"github": {
+			"name": "GitHub MCP Server",
+			"description": "Official GitHub server for repository management, issues, PRs, and CI/CD",
+			"tier": "core",
+			"verified": true,
+			"publisher": "github",
+			"repository": "https://github.com/github/github-mcp-server",
+			"transport": "http",
+			"config": {
+				"remote": {
+					"url": "https://api.githubcopilot.com/mcp/"
+				},
+				"local": {
+					"command": "docker",
+					"args": [
+						"run",
+						"-i",
+						"--rm",
+						"-e",
+						"GITHUB_PERSONAL_ACCESS_TOKEN",
+						"ghcr.io/github/github-mcp-server"
+					]
+				}
+			},
+			"envVars": ["GITHUB_PERSONAL_ACCESS_TOKEN"],
+			"requiredPermissions": ["repo", "read:org", "read:user"],
+			"agentMappings": ["commit-manager", "code-reviewer", "quality-checker"],
+			"securityNotes": "Use fine-grained PAT with minimal scopes. Never commit tokens."
+		},
+
+		"nextjs-devtools": {
+			"name": "Next.js DevTools MCP",
+			"description": "Official Vercel server for Next.js 16+ development with error detection and live state",
+			"tier": "core",
+			"verified": true,
+			"publisher": "vercel",
+			"repository": "https://github.com/vercel/next-devtools-mcp",
+			"transport": "stdio",
+			"config": {
+				"command": "npx",
+				"args": ["-y", "next-devtools-mcp@latest"]
+			},
+			"envVars": [],
+			"requiredPermissions": [],
+			"agentMappings": ["debugger", "performance", "quality-checker"],
+			"securityNotes": "Safe - connects to local dev server only"
+		},
+
+		"mongodb": {
+			"name": "MongoDB MCP Server",
+			"description": "Official MongoDB server for database operations on Atlas and local MongoDB",
+			"tier": "core",
+			"verified": true,
+			"publisher": "mongodb-js",
+			"repository": "https://github.com/mongodb-js/mongodb-mcp-server",
+			"transport": "stdio",
+			"config": {
+				"command": "npx",
+				"args": ["-y", "@mongodb-js/mongodb-mcp-server"],
+				"options": {
+					"readOnly": false,
+					"connectionString": "${MONGODB_URI}"
+				}
+			},
+			"envVars": ["MONGODB_URI"],
+			"requiredPermissions": ["database read/write"],
+			"agentMappings": ["analyzer", "debugger", "performance"],
+			"securityNotes": "Enable readOnly mode for production. Use connection strings with minimal privileges."
+		},
+
+		"playwright": {
+			"name": "Playwright MCP Server",
+			"description": "Official Microsoft server for browser automation and E2E testing",
+			"tier": "core",
+			"verified": true,
+			"publisher": "microsoft",
+			"repository": "https://github.com/microsoft/playwright-mcp",
+			"transport": "stdio",
+			"config": {
+				"command": "npx",
+				"args": ["-y", "@playwright/mcp@latest"]
+			},
+			"envVars": [],
+			"requiredPermissions": [],
+			"agentMappings": ["tester", "ui-ux-reviewer", "quality-checker"],
+			"securityNotes": "Safe - runs in isolated browser context"
+		},
+
+		"context7": {
+			"name": "Context7 MCP",
+			"description": "Real-time, version-specific documentation for libraries and frameworks",
+			"tier": "core",
+			"verified": true,
+			"publisher": "upstash",
+			"repository": "https://github.com/upstash/context7",
+			"transport": "stdio",
+			"config": {
+				"command": "npx",
+				"args": ["-y", "@upstash/context7-mcp@latest"]
+			},
+			"envVars": [],
+			"requiredPermissions": [],
+			"agentMappings": ["research", "analyzer", "documenter"],
+			"securityNotes": "Safe - read-only documentation fetching"
+		},
+
+		"sequential-thinking": {
+			"name": "Sequential Thinking MCP",
+			"description": "Structured reasoning for complex problem-solving and planning",
+			"tier": "core",
+			"verified": true,
+			"publisher": "modelcontextprotocol",
+			"repository": "https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking",
+			"transport": "stdio",
+			"config": {
+				"command": "npx",
+				"args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+			},
+			"envVars": [],
+			"requiredPermissions": [],
+			"agentMappings": ["orchestrator", "analyzer", "debugger"],
+			"securityNotes": "Safe - no external connections"
+		},
+
+		"sentry": {
+			"name": "Sentry MCP Server",
+			"description": "Error tracking, monitoring, and AI-powered debugging with Seer",
+			"tier": "productivity",
+			"verified": true,
+			"publisher": "getsentry",
+			"repository": "https://github.com/getsentry/sentry-mcp-stdio",
+			"transport": "http",
+			"config": {
+				"url": "https://mcp.sentry.dev/mcp"
+			},
+			"envVars": [],
+			"requiredPermissions": ["Sentry OAuth"],
+			"agentMappings": ["debugger", "quality-checker", "performance"],
+			"securityNotes": "Requires OAuth authentication to Sentry"
+		},
+
+		"figma": {
+			"name": "Figma MCP Server",
+			"description": "Design-to-code workflows with direct Figma integration",
+			"tier": "productivity",
+			"verified": true,
+			"publisher": "figma",
+			"repository": "https://github.com/figma/mcp-server-guide",
+			"transport": "http",
+			"config": {
+				"url": "https://mcp.figma.com/mcp"
+			},
+			"envVars": [],
+			"requiredPermissions": ["Figma OAuth"],
+			"agentMappings": ["ui-ux-reviewer", "documenter"],
+			"securityNotes": "Requires Figma account. Rate limited based on plan."
+		},
+
+		"brave-search": {
+			"name": "Brave Search MCP",
+			"description": "Privacy-first web search for research and current information",
+			"tier": "productivity",
+			"verified": true,
+			"publisher": "modelcontextprotocol",
+			"repository": "https://github.com/modelcontextprotocol/servers/tree/main/src/brave-search",
+			"transport": "stdio",
+			"config": {
+				"command": "npx",
+				"args": ["-y", "@modelcontextprotocol/server-brave-search"]
+			},
+			"envVars": ["BRAVE_API_KEY"],
+			"requiredPermissions": [],
+			"agentMappings": ["research", "ui-ux-reviewer"],
+			"securityNotes": "Requires Brave Search API key. Free tier available."
+		},
+
+		"memory": {
+			"name": "Memory MCP Server",
+			"description": "Persistent context retention across sessions using knowledge graph",
+			"tier": "productivity",
+			"verified": true,
+			"publisher": "modelcontextprotocol",
+			"repository": "https://github.com/modelcontextprotocol/servers/tree/main/src/memory",
+			"transport": "stdio",
+			"config": {
+				"command": "npx",
+				"args": ["-y", "@modelcontextprotocol/server-memory"]
+			},
+			"envVars": [],
+			"requiredPermissions": [],
+			"agentMappings": ["orchestrator", "domain-updater", "commit-manager"],
+			"securityNotes": "Stores data locally. Review stored data periodically."
+		},
+
+		"time": {
+			"name": "Time MCP Server",
+			"description": "Timezone conversion and scheduling capabilities",
+			"tier": "productivity",
+			"verified": true,
+			"publisher": "modelcontextprotocol",
+			"repository": "https://github.com/modelcontextprotocol/servers/tree/main/src/time",
+			"transport": "stdio",
+			"config": {
+				"command": "uvx",
+				"args": ["mcp-server-time"]
+			},
+			"envVars": [],
+			"requiredPermissions": [],
+			"agentMappings": ["commit-manager", "documenter"],
+			"securityNotes": "Safe - no external connections"
+		},
+
+		"docker-hub": {
+			"name": "Docker Hub MCP Server",
+			"description": "Container image discovery and management from Docker Hub",
+			"tier": "infrastructure",
+			"verified": true,
+			"publisher": "docker",
+			"repository": "https://www.docker.com/blog/introducing-docker-hub-mcp-server/",
+			"transport": "stdio",
+			"config": {
+				"command": "docker",
+				"args": ["run", "-i", "--rm", "mcp/docker-hub"]
+			},
+			"envVars": ["DOCKER_HUB_PAT"],
+			"requiredPermissions": ["Docker Hub account"],
+			"agentMappings": ["quality-checker"],
+			"securityNotes": "Use read-only tokens when possible"
+		},
+
+		"upstash": {
+			"name": "Upstash MCP Server",
+			"description": "Redis and rate limiting management for serverless applications",
+			"tier": "infrastructure",
+			"verified": true,
+			"publisher": "upstash",
+			"repository": "https://github.com/upstash/mcp-server",
+			"transport": "stdio",
+			"config": {
+				"command": "npx",
+				"args": ["-y", "@upstash/mcp-server@latest"]
+			},
+			"envVars": ["UPSTASH_EMAIL", "UPSTASH_API_KEY"],
+			"requiredPermissions": ["Upstash account"],
+			"agentMappings": ["performance", "security-auditor"],
+			"securityNotes": "Use API keys with minimal permissions"
+		},
+
+		"fetch": {
+			"name": "Fetch MCP Server",
+			"description": "HTTP API requests and web content retrieval",
+			"tier": "infrastructure",
+			"verified": true,
+			"publisher": "modelcontextprotocol",
+			"repository": "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch",
+			"transport": "stdio",
+			"config": {
+				"command": "uvx",
+				"args": ["mcp-server-fetch"]
+			},
+			"envVars": [],
+			"requiredPermissions": [],
+			"agentMappings": ["research", "analyzer"],
+			"securityNotes": "Be cautious with untrusted URLs - prompt injection risk"
+		}
+	},
+
+	"security": {
+		"guidelines": [
+			"Only install verified MCPs from official publishers",
+			"Use fine-grained tokens with minimal permissions",
+			"Never commit API keys or tokens to version control",
+			"Enable readOnly mode for production databases",
+			"Review MCP source code before installation",
+			"Use containerized MCPs when available for isolation",
+			"Monitor MCP activity logs for unusual behavior"
+		],
+		"redFlags": [
+			"MCPs requesting excessive permissions",
+			"Unverified publishers or missing repository",
+			"MCPs that execute arbitrary shell commands",
+			"MCPs with eval() or exec() in source code",
+			"MCPs with recent CVEs or security advisories"
+		],
+		"trustedPublishers": [
+			"modelcontextprotocol",
+			"anthropic",
+			"github",
+			"microsoft",
+			"vercel",
+			"mongodb-js",
+			"upstash",
+			"docker",
+			"figma",
+			"getsentry"
+		]
+	},
+
+	"installation": {
+		"parallelLimit": 5,
+		"timeout": 60000,
+		"retryAttempts": 3,
+		"scope": "project"
+	}
+}

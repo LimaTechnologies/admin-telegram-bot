@@ -1,0 +1,45 @@
+{
+	"$comment": "Security rules. Used by security-auditor agent.",
+
+	"authentication": {
+		"framework": "session-based",
+		"userIdSource": "ctx.user._id",
+		"protectedProcedure": "protectedProcedure",
+		"sessionStore": "mongodb"
+	},
+
+	"validation": {
+		"library": "zod",
+		"requireOnAllRoutes": true
+	},
+
+	"sensitivePatterns": {
+		"forbidden": [
+			"input.userId",
+			"input.user_id",
+			"req.body.userId",
+			"passwordHash",
+			"password:"
+		],
+		"files": ["auth/", "api/", "server/", "routers/"]
+	},
+
+	"cryptography": {
+		"passwordHashing": "bcrypt",
+		"minSaltRounds": 10,
+		"tokenGeneration": "crypto.randomBytes"
+	},
+
+	"cookies": {
+		"httpOnly": true,
+		"secure": true,
+		"sameSite": "strict"
+	},
+
+	"owaspChecks": {
+		"a01_brokenAccessControl": true,
+		"a02_cryptographicFailures": true,
+		"a03_injection": true,
+		"a07_authenticationFailures": true
+	}
+}
