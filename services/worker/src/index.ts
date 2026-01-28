@@ -3,6 +3,7 @@ import { connectDB, getRedisConnection, QUEUE_NAMES, logger } from '@common';
 import { processAuditLog } from './processors/audit.processor';
 import { processCampaignCheck } from './processors/campaign.processor';
 import { processAnalyticsAggregation } from './processors/analytics.processor';
+import { processBotTasks } from './processors/bot-tasks.processor';
 
 async function main() {
   logger.info('Starting worker service...');
@@ -67,6 +68,24 @@ async function main() {
     logger.error('Analytics aggregation failed', err, { jobId: job?.id });
   });
 
+  // Bot tasks worker
+  const botTasksWorker = new Worker(
+    QUEUE_NAMES.BOT_TASKS,
+    processBotTasks,
+    {
+      connection,
+      concurrency: 5,
+    }
+  );
+
+  botTasksWorker.on('completed', (job) => {
+    logger.debug('Bot task completed', { jobId: job.id, type: job.data?.type });
+  });
+
+  botTasksWorker.on('failed', (job, err) => {
+    logger.error('Bot task failed', err, { jobId: job?.id, type: job?.data?.type });
+  });
+
   logger.info('Worker service started successfully');
 
   // Graceful shutdown
@@ -76,6 +95,7 @@ async function main() {
       auditWorker.close(),
       campaignWorker.close(),
       analyticsWorker.close(),
+      botTasksWorker.close(),
     ]);
     process.exit(0);
   };

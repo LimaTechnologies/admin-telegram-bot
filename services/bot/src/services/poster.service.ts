@@ -1,5 +1,4 @@
-import { Bot } from 'grammy';
-import { getSettings, logger } from '@common';
+import { getSettings, logger, getBot } from '@common';
 
 interface SendMessageOptions {
   groupId: string;
@@ -17,24 +16,6 @@ interface SendMessageResult {
   error?: string;
 }
 
-let botInstance: Bot | null = null;
-
-async function getBotInstance(): Promise<Bot> {
-  if (botInstance) {
-    return botInstance;
-  }
-
-  const settings = await getSettings();
-  const token = settings.bot.token || process.env['TELEGRAM_BOT_TOKEN'];
-
-  if (!token) {
-    throw new Error('Bot token not configured');
-  }
-
-  botInstance = new Bot(token);
-  return botInstance;
-}
-
 export async function sendTelegramMessage(options: SendMessageOptions): Promise<SendMessageResult> {
   const { groupId, creative } = options;
 
@@ -49,7 +30,7 @@ export async function sendTelegramMessage(options: SendMessageOptions): Promise<
       throw new Error('Emergency stop is active');
     }
 
-    const bot = await getBotInstance();
+    const bot = await getBot();
 
     // Build caption with CTA
     let caption = creative.caption;
@@ -115,7 +96,7 @@ export async function sendTelegramMessage(options: SendMessageOptions): Promise<
 
 export async function deleteMessage(groupId: string, messageId: number): Promise<boolean> {
   try {
-    const bot = await getBotInstance();
+    const bot = await getBot();
     await bot.api.deleteMessage(groupId, messageId);
     return true;
   } catch (error) {
@@ -126,7 +107,7 @@ export async function deleteMessage(groupId: string, messageId: number): Promise
 
 export async function getGroupInfo(groupId: string): Promise<{ memberCount: number; title: string } | null> {
   try {
-    const bot = await getBotInstance();
+    const bot = await getBot();
     const chat = await bot.api.getChat(groupId);
     const memberCount = await bot.api.getChatMemberCount(groupId);
 

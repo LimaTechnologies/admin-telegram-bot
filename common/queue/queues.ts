@@ -7,6 +7,7 @@ export const QUEUE_NAMES = {
   AUDIT_LOG: 'audit-log',
   ANALYTICS_AGGREGATE: 'analytics-aggregate',
   CAMPAIGN_CHECK: 'campaign-check',
+  BOT_TASKS: 'bot-tasks',
 } as const;
 
 // Default queue options
@@ -57,6 +58,19 @@ export const campaignCheckQueue = new Queue(QUEUE_NAMES.CAMPAIGN_CHECK, {
   },
 });
 
+// Bot tasks queue (sync groups, send messages, etc.)
+export const botTasksQueue = new Queue(QUEUE_NAMES.BOT_TASKS, {
+  ...defaultQueueOptions,
+  defaultJobOptions: {
+    ...defaultQueueOptions.defaultJobOptions,
+    attempts: 3,
+    backoff: {
+      type: 'exponential',
+      delay: 2000,
+    },
+  },
+});
+
 // Factory function for per-group post queues
 const postQueues = new Map<string, Queue>();
 
@@ -93,6 +107,7 @@ export async function closeAllQueues(): Promise<void> {
   await auditLogQueue.close();
   await analyticsQueue.close();
   await campaignCheckQueue.close();
+  await botTasksQueue.close();
 
   for (const queue of postQueues.values()) {
     await queue.close();

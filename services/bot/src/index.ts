@@ -1,5 +1,12 @@
-import { Bot } from 'grammy';
-import { connectDB, getSettings, logger } from '@common';
+import {
+  connectDB,
+  getSettings,
+  logger,
+  getBot,
+  handleBotAddedToGroup,
+  handleBotRemovedFromGroup,
+  handleBotPermissionsChanged,
+} from '@common';
 
 async function main() {
   logger.info('Starting bot service...');
@@ -8,16 +15,8 @@ async function main() {
   await connectDB();
   logger.info('Connected to database');
 
-  // Get bot token from settings
-  const settings = await getSettings();
-  const token = settings.bot.token || process.env['TELEGRAM_BOT_TOKEN'];
-
-  if (!token) {
-    throw new Error('Bot token not configured. Set TELEGRAM_BOT_TOKEN or configure in settings.');
-  }
-
-  // Create bot instance
-  const bot = new Bot(token);
+  // Get bot instance (singleton)
+  const bot = await getBot();
 
   // Handle /start command
   bot.command('start', async (ctx) => {
@@ -41,6 +40,52 @@ async function main() {
       `Global Rate Limit: ${currentSettings.spamControl.globalMaxAdsPerHour} ads/hour\n` +
       `Manual Approval: ${currentSettings.spamControl.requireManualApproval ? 'Required' : 'Not Required'}`
     );
+  });
+
+  // Handle my_chat_member updates - when bot is added/removed/promoted/demoted
+  bot.on('my_chat_member', async (ctx) => {
+    const update = ctx.myChatMember;
+    const chatId = update.chat.id;
+    const oldStatus = update.old_chat_member.status;
+    const newStatus = update.new_chat_member.status;
+
+    logger.info('my_chat_member update received', {
+      chatId,
+      chatType: update.chat.type,
+      oldStatus,
+      newStatus,
+    });
+
+    // Skip private chats
+    if (update.chat.type === 'private') {
+      return;
+    }
+
+    // Bot was added as admin (or promoted)
+    if (
+      (newStatus === 'administrator' || newStatus === 'creator') &&
+      (oldStatus === 'left' || oldStatus === 'kicked' || oldStatus === 'member')
+    ) {
+      await handleBotAddedToGroup(chatId);
+    }
+    // Bot was removed (left, kicked, or restricted)
+    else if (
+      (newStatus === 'left' || newStatus === 'kicked') &&
+      (oldStatus === 'administrator' || oldStatus === 'creator' || oldStatus === 'member')
+    ) {
+      await handleBotRemovedFromGroup(chatId);
+    }
+    // Bot permissions changed (still admin but different permissions)
+    else if (
+      (newStatus === 'administrator' || newStatus === 'creator') &&
+      (oldStatus === 'administrator' || oldStatus === 'creator')
+    ) {
+      await handleBotPermissionsChanged(chatId);
+    }
+    // Bot was demoted from admin to regular member
+    else if (newStatus === 'member' && (oldStatus === 'administrator' || oldStatus === 'creator')) {
+      await handleBotRemovedFromGroup(chatId);
+    }
   });
 
   // Error handler

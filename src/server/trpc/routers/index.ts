@@ -11,6 +11,8 @@ import { scheduledPostRouter } from './scheduledPost.router';
 import { settingsRouter } from './settings.router';
 import { auditRouter } from './audit.router';
 import { analyticsRouter } from './analytics.router';
+import { botAdminRouter } from './bot-admin.router';
+import { queueRouter } from './queue.router';
 
 export const appRouter = router({
   auth: authRouter,
@@ -25,6 +27,8 @@ export const appRouter = router({
   settings: settingsRouter,
   audit: auditRouter,
   analytics: analyticsRouter,
+  botAdmin: botAdminRouter,
+  queue: queueRouter,
 });
 
 export type AppRouter = typeof appRouter;
