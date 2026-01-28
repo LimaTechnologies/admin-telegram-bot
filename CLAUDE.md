@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** feature/telegram-bot-integration
+**Branch:** master
 **Date:** 2026-01-28
-**Summary:** Implemented complete Telegram bot integration with rate limiting, scheduled messages, and queue monitoring. Added maxAdsPerDay and cooldown enforcement per group, force send for delayed jobs, scheduled message creation, and group discovery via bot events. Bot service uses grammY with singleton pattern. Workers process bot tasks with 5 concurrent processors and 50ms rate limit delay.
+**Summary:** Completed Telegram bot E2E testing via Playwright MCP. Added manual group addition by Telegram ID for cases where auto-discovery doesn't find groups. Verified queue monitor shows failed/delayed jobs correctly. All bot features tested: message sending, scheduling, error handling, force send for delayed jobs.
 
 ---
 
