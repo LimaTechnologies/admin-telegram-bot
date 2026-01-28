@@ -206,7 +206,7 @@ export const groupRouter = router({
       };
     }),
 
-  // Sync a single group
+  // Sync a single group (also adds if not exists)
   syncGroup: operatorProcedure
     .input(z.object({ telegramId: z.string() }))
     .use(
@@ -228,7 +228,54 @@ export const groupRouter = router({
 
       return {
         jobId: job.id,
-        message: `Syncing group ${input.telegramId}`,
+        message: `Syncing group ${input.telegramId}. This will add the group if it doesn't exist.`,
+      };
+    }),
+
+  // Add group by Telegram ID (manually discover a group)
+  addByTelegramId: operatorProcedure
+    .input(z.object({ telegramId: z.string().min(1) }))
+    .use(
+      withAudit({
+        action: 'group.create',
+        entityType: 'group',
+        getEntityId: (input) => (input as { telegramId: string }).telegramId,
+      })
+    )
+    .mutation(async ({ input }) => {
+      // Check if already exists
+      const existing = await TelegramGroup.findOne({ telegramId: input.telegramId });
+      if (existing) {
+        // Just sync it
+        const job = await botTasksQueue.add(
+          'sync-single-group',
+          {
+            type: 'sync-single-group',
+            data: { telegramId: input.telegramId },
+          } as BotTaskJob,
+          { priority: 1 }
+        );
+        return {
+          jobId: job.id,
+          message: `Group already exists, syncing ${input.telegramId}`,
+          isNew: false,
+        };
+      }
+
+      // Add to queue for sync (will create if bot has access)
+      const job = await botTasksQueue.add(
+        'sync-single-group',
+        {
+          type: 'sync-single-group',
+          data: { telegramId: input.telegramId },
+        } as BotTaskJob,
+        { priority: 1 }
+      );
+
+      return {
+        jobId: job.id,
+        message: `Adding group ${input.telegramId}. Make sure the bot is admin in this group.`,
+        isNew: true,
       };
     }),
 

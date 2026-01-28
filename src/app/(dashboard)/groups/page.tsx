@@ -15,6 +15,7 @@ import {
   XCircle,
   Clock,
   Zap,
+  Plus,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import { DataTable } from '@/components/shared/data-table';
@@ -59,6 +60,8 @@ export default function GroupsPage() {
   const [testMessage, setTestMessage] = useState(
     '🧪 Test message from Admin Dashboard\n\nThis is a test message to verify bot connectivity.'
   );
+  const [addGroupOpen, setAddGroupOpen] = useState(false);
+  const [newGroupId, setNewGroupId] = useState('');
 
   const { data, isLoading, refetch } = trpc.group.list.useQuery({
     page,
@@ -116,6 +119,19 @@ export default function GroupsPage() {
       setTestMessage(
         '🧪 Test message from Admin Dashboard\n\nThis is a test message to verify bot connectivity.'
       );
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const addGroup = trpc.group.addByTelegramId.useMutation({
+    onSuccess: (data) => {
+      toast.success(data.message);
+      setAddGroupOpen(false);
+      setNewGroupId('');
+      // Refetch after a short delay to allow the queue job to process
+      setTimeout(() => refetch(), 2000);
     },
     onError: (error) => {
       toast.error(error.message);
@@ -341,6 +357,13 @@ export default function GroupsPage() {
         <div className="flex gap-2">
           <Button
             variant="outline"
+            onClick={() => setAddGroupOpen(true)}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Group
+          </Button>
+          <Button
+            variant="outline"
             onClick={() => syncAll.mutate()}
             disabled={syncAll.isPending}
           >
@@ -520,6 +543,50 @@ export default function GroupsPage() {
               disabled={sendTestMessage.isPending || !testMessage.trim()}
             >
               {sendTestMessage.isPending ? 'Sending...' : 'Send Message'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Group Dialog */}
+      <Dialog open={addGroupOpen} onOpenChange={setAddGroupOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Group by Telegram ID</DialogTitle>
+            <DialogDescription>
+              Enter the Telegram group/channel ID to add it manually. Make sure the bot is an admin in the group.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="telegramId">Telegram ID</Label>
+              <Input
+                id="telegramId"
+                value={newGroupId}
+                onChange={(e) => setNewGroupId(e.target.value)}
+                placeholder="e.g., -1001234567890"
+              />
+              <p className="text-xs text-muted-foreground">
+                Groups have negative IDs (e.g., -1001234567890). Channels also use negative IDs.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddGroupOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!newGroupId.trim()) {
+                  toast.error('Please enter a Telegram ID');
+                  return;
+                }
+                addGroup.mutate({ telegramId: newGroupId.trim() });
+              }}
+              disabled={addGroup.isPending || !newGroupId.trim()}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              {addGroup.isPending ? 'Adding...' : 'Add Group'}
             </Button>
           </DialogFooter>
         </DialogContent>
