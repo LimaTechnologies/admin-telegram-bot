@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** feature/modal-crud-functionality
-**Date:** 2026-01-27
-**Summary:** Fixed modal CRUD functionality across dashboard pages. Added formData state, mutations, and handlers to Groups, Creatives, Models, Casinos, Revenue/Deals, and Scheduling pages. Created campaigns/new page for campaign creation. All modals now properly save data to MongoDB.
+**Branch:** fix/analytics-charts-visibility
+**Date:** 2026-01-28
+**Summary:** Fixed analytics charts visibility in dark mode. Added vibrant colors (green/blue/orange), legends, improved tooltips with contrasting backgrounds, and progress bars for Campaign Performance section. Charts now use explicit hex colors instead of CSS variables with low contrast.
 
 ---
 

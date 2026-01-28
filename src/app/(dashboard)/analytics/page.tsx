@@ -16,7 +16,16 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
+  Legend,
 } from 'recharts';
+
+// Vibrant chart colors with good contrast
+const CHART_COLORS = {
+  views: '#22c55e',      // Green
+  clicks: '#3b82f6',     // Blue
+  revenue: '#f59e0b',    // Amber/Orange
+  accent: '#ec4899',     // Pink
+};
 
 export default function AnalyticsPage() {
   const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('7d');
@@ -152,26 +161,49 @@ export default function AnalyticsPage() {
             <div className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" />
-                  <YAxis stroke="hsl(var(--muted-foreground))" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                  <XAxis
+                    dataKey="name"
+                    stroke="hsl(var(--muted-foreground))"
+                    tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                    fontSize={12}
+                  />
+                  <YAxis
+                    stroke="hsl(var(--muted-foreground))"
+                    tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                    fontSize={12}
+                  />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: 'hsl(var(--card))',
-                      border: '1px solid hsl(var(--border))',
+                      backgroundColor: '#1f2937',
+                      border: '1px solid #374151',
+                      borderRadius: '8px',
+                      color: '#f9fafb',
                     }}
+                    labelStyle={{ color: '#9ca3af', fontWeight: 500 }}
+                    itemStyle={{ color: '#f9fafb' }}
+                  />
+                  <Legend
+                    wrapperStyle={{ paddingTop: 20 }}
+                    formatter={(value) => <span style={{ color: '#d1d5db' }}>{value}</span>}
                   />
                   <Line
                     type="monotone"
                     dataKey="views"
-                    stroke="hsl(var(--primary))"
-                    strokeWidth={2}
+                    name="Views"
+                    stroke={CHART_COLORS.views}
+                    strokeWidth={3}
+                    dot={{ fill: CHART_COLORS.views, strokeWidth: 2, r: 5 }}
+                    activeDot={{ r: 8, fill: CHART_COLORS.views }}
                   />
                   <Line
                     type="monotone"
                     dataKey="clicks"
-                    stroke="hsl(var(--chart-2))"
-                    strokeWidth={2}
+                    name="Clicks"
+                    stroke={CHART_COLORS.clicks}
+                    strokeWidth={3}
+                    dot={{ fill: CHART_COLORS.clicks, strokeWidth: 2, r: 5 }}
+                    activeDot={{ r: 8, fill: CHART_COLORS.clicks }}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -188,16 +220,45 @@ export default function AnalyticsPage() {
             <div className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" />
-                  <YAxis stroke="hsl(var(--muted-foreground))" />
+                  <defs>
+                    <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={CHART_COLORS.revenue} stopOpacity={1} />
+                      <stop offset="100%" stopColor={CHART_COLORS.revenue} stopOpacity={0.6} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                  <XAxis
+                    dataKey="name"
+                    stroke="hsl(var(--muted-foreground))"
+                    tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                    fontSize={12}
+                  />
+                  <YAxis
+                    stroke="hsl(var(--muted-foreground))"
+                    tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                    fontSize={12}
+                    tickFormatter={(value) => `$${value}`}
+                  />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: 'hsl(var(--card))',
-                      border: '1px solid hsl(var(--border))',
+                      backgroundColor: '#1f2937',
+                      border: '1px solid #374151',
+                      borderRadius: '8px',
+                      color: '#f9fafb',
                     }}
+                    labelStyle={{ color: '#9ca3af', fontWeight: 500 }}
+                    formatter={(value: number) => [`$${value}`, 'Revenue']}
                   />
-                  <Bar dataKey="revenue" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  <Legend
+                    wrapperStyle={{ paddingTop: 20 }}
+                    formatter={() => <span style={{ color: '#d1d5db' }}>Revenue</span>}
+                  />
+                  <Bar
+                    dataKey="revenue"
+                    name="Revenue"
+                    fill="url(#revenueGradient)"
+                    radius={[6, 6, 0, 0]}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -217,23 +278,43 @@ export default function AnalyticsPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {campaignPerformance.map((campaign) => (
-              <div
-                key={campaign.name}
-                className="flex items-center justify-between p-4 rounded-lg bg-muted/30"
-              >
-                <div>
-                  <div className="font-medium">{campaign.name}</div>
-                  <div className="text-sm text-muted-foreground">
-                    {formatNumber(campaign.views)} views
+            {campaignPerformance.map((campaign, index) => {
+              const maxViews = Math.max(...campaignPerformance.map(c => c.views));
+              const progressPercent = (campaign.views / maxViews) * 100;
+              const colors = [CHART_COLORS.views, CHART_COLORS.clicks, CHART_COLORS.revenue, CHART_COLORS.accent];
+              const barColor = colors[index % colors.length];
+
+              return (
+                <div
+                  key={campaign.name}
+                  className="p-4 rounded-lg bg-muted/30 space-y-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">{campaign.name}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {formatNumber(campaign.views)} views
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-medium">{formatNumber(campaign.clicks)} clicks</div>
+                      <div className="text-sm font-semibold" style={{ color: barColor }}>
+                        {campaign.ctr}% CTR
+                      </div>
+                    </div>
+                  </div>
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${progressPercent}%`,
+                        backgroundColor: barColor,
+                      }}
+                    />
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="font-medium">{formatNumber(campaign.clicks)} clicks</div>
-                  <div className="text-sm text-green-500">{campaign.ctr}% CTR</div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </CardContent>
       </Card>

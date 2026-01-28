@@ -1,9 +1,9 @@
 # Domain: Dashboard Pages
 
 ## Last Update
-- **Date:** 2027-01-27
-- **Commit:** 3972e6e
-- **Summary:** Added functional modals to all CRUD pages + new campaign creation page
+- **Date:** 2026-01-28
+- **Commit:** fix/analytics-charts-visibility
+- **Summary:** Fixed analytics charts visibility - vibrant colors, legends, improved tooltips
 
 ## Files
 
@@ -125,6 +125,28 @@ const handleCreate = () => {
 - **Required fields:** name, startDate, groupIds (min 1), creativeIds (min 1)
 
 ### Problems & Solutions
+
+#### 2026-01-28 - Analytics Charts Dark Mode Visibility
+
+**Problem:** Charts on analytics page were nearly invisible in dark mode - grey bars on dark background, no color differentiation between Views and Clicks lines.
+
+**Root Cause:** Charts used CSS variables (`hsl(var(--primary))`) which in dark mode resolve to low-contrast grey colors (oklch with 0 chroma).
+
+**Solution:**
+- Created explicit CHART_COLORS constant with vibrant hex colors:
+  - Views: `#22c55e` (green-500)
+  - Clicks: `#3b82f6` (blue-500)
+  - Revenue: `#f59e0b` (amber-500)
+- Added Legend component to both charts
+- Enhanced Line component with visible dots (r=5) and activeDot (r=8)
+- Added gradient fill to Bar chart
+- Improved Tooltip with contrasting dark background (#1f2937)
+- Added progress bars to Campaign Performance section
+
+**Prevention:** For Recharts in dark mode, always use explicit hex colors instead of CSS variables. Add legends to all charts.
+
+**Files Modified:**
+- `src/app/(dashboard)/analytics/page.tsx`
 
 #### 2027-01-27 - Modal CRUD Pattern Standardization
 
