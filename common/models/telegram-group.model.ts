@@ -1,5 +1,5 @@
 import { Schema, model, models, type Document, type Model } from 'mongoose';
-import type { ITelegramGroup, GroupSettings, GroupStats, BestPostingHours } from '$types/telegram-group';
+import type { ITelegramGroup, GroupSettings, GroupStats, BestPostingHours, BotPermissions } from '$types/telegram-group';
 
 export interface TelegramGroupDocument extends Omit<ITelegramGroup, '_id'>, Document {}
 
@@ -69,6 +69,44 @@ const bestPostingHoursSchema = new Schema<BestPostingHours>(
   { _id: false }
 );
 
+const botPermissionsSchema = new Schema<BotPermissions>(
+  {
+    canPostMessages: {
+      type: Boolean,
+      default: false,
+    },
+    canDeleteMessages: {
+      type: Boolean,
+      default: false,
+    },
+    canPinMessages: {
+      type: Boolean,
+      default: false,
+    },
+    canInviteUsers: {
+      type: Boolean,
+      default: false,
+    },
+    canRestrictMembers: {
+      type: Boolean,
+      default: false,
+    },
+    canPromoteMembers: {
+      type: Boolean,
+      default: false,
+    },
+    canChangeInfo: {
+      type: Boolean,
+      default: false,
+    },
+    canManageChat: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  { _id: false }
+);
+
 const telegramGroupSchema = new Schema<TelegramGroupDocument>(
   {
     telegramId: {
@@ -90,6 +128,12 @@ const telegramGroupSchema = new Schema<TelegramGroupDocument>(
       enum: ['public', 'private', 'supergroup', 'channel'],
       default: 'supergroup',
     },
+    description: {
+      type: String,
+    },
+    inviteLink: {
+      type: String,
+    },
     settings: {
       type: groupSettingsSchema,
       default: () => ({}),
@@ -102,9 +146,29 @@ const telegramGroupSchema = new Schema<TelegramGroupDocument>(
       type: [bestPostingHoursSchema],
       default: [],
     },
+    botPermissions: {
+      type: botPermissionsSchema,
+    },
+    lastSyncAt: {
+      type: Date,
+    },
+    discoveredAt: {
+      type: Date,
+    },
+    isAutoDiscovered: {
+      type: Boolean,
+      default: false,
+    },
+    lastMessageId: {
+      type: Number,
+    },
     joinedAt: {
       type: Date,
       default: Date.now,
+    },
+    postsToday: {
+      type: Number,
+      default: 0,
     },
   },
   {
@@ -116,6 +180,8 @@ const telegramGroupSchema = new Schema<TelegramGroupDocument>(
 // Indexes
 telegramGroupSchema.index({ 'settings.isActive': 1 });
 telegramGroupSchema.index({ 'settings.allowedAdTypes': 1 });
+telegramGroupSchema.index({ isAutoDiscovered: 1 });
+telegramGroupSchema.index({ lastSyncAt: 1 });
 
 export const TelegramGroup: Model<TelegramGroupDocument> =
   models['TelegramGroup'] || model<TelegramGroupDocument>('TelegramGroup', telegramGroupSchema);
