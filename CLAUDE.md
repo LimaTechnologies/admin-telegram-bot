@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** fix/analytics-charts-visibility
+**Branch:** feature/telegram-bot-integration
 **Date:** 2026-01-28
-**Summary:** Fixed analytics charts visibility in dark mode. Added vibrant colors (green/blue/orange), legends, improved tooltips with contrasting backgrounds, and progress bars for Campaign Performance section. Charts now use explicit hex colors instead of CSS variables with low contrast.
+**Summary:** Implemented complete Telegram bot integration with rate limiting, scheduled messages, and queue monitoring. Added maxAdsPerDay and cooldown enforcement per group, force send for delayed jobs, scheduled message creation, and group discovery via bot events. Bot service uses grammY with singleton pattern. Workers process bot tasks with 5 concurrent processors and 50ms rate limit delay.
 
 ---
 
