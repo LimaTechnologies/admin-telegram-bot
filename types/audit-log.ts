@@ -37,7 +37,27 @@ export type AuditAction =
   | 'deal.delete'
   | 'settings.update'
   | 'spam.emergency_stop'
-  | 'spam.resume';
+  | 'spam.resume'
+  | 'group.discover'
+  | 'group.sync'
+  | 'group.syncAll'
+  | 'group.testMessage'
+  | 'group.deleteMessage'
+  | 'bot.sendMessage'
+  | 'bot.deleteMessage'
+  | 'bot.banUser'
+  | 'bot.unbanUser'
+  | 'bot.pinMessage'
+  | 'bot.unpinMessage'
+  | 'queue.retryJob'
+  | 'queue.removeJob'
+  | 'queue.clean'
+  | 'queue.pause'
+  | 'queue.resume'
+  | 'queue.retryAllFailed'
+  | 'queue.forceSend'
+  | 'queue.reschedule'
+  | 'queue.scheduleMessage';
 
 export type EntityType =
   | 'user'
@@ -48,7 +68,9 @@ export type EntityType =
   | 'model'
   | 'casino'
   | 'deal'
-  | 'settings';
+  | 'settings'
+  | 'bot'
+  | 'queue';
 
 export interface AuditChanges {
   before?: Record<string, unknown>;
