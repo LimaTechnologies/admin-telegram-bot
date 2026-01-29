@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** master
+**Branch:** feature/telegram-bot-integration
 **Date:** 2026-01-28
-**Summary:** Completed Telegram bot E2E testing via Playwright MCP. Added manual group addition by Telegram ID for cases where auto-discovery doesn't find groups. Verified queue monitor shows failed/delayed jobs correctly. All bot features tested: message sending, scheduling, error handling, force send for delayed jobs.
+**Summary:** Fixed two bugs from E2E testing: (1) Overview/Dashboard page now renders at `/` instead of redirecting to `/groups` - deleted redirect file `src/app/page.tsx`. (2) Fixed Edit Settings 404 on Groups page - changed from navigation to `/groups/[id]` to a modal dialog with group settings form. Also fixed Suspense boundary for useSearchParams in `/verify` page.
 
 ---
 

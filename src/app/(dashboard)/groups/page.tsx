@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   RefreshCw,
   Users,
@@ -39,6 +38,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Tooltip,
   TooltipContent,
@@ -47,8 +54,21 @@ import {
 } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 
+interface GroupSettings {
+  maxAdsPerDay: number;
+  cooldownMinutes: number;
+  allowedAdTypes: 'onlyfans' | 'casino' | 'both';
+  isActive: boolean;
+  requiresApproval: boolean;
+}
+
+interface EditGroupState {
+  id: string;
+  name: string;
+  settings: GroupSettings;
+}
+
 export default function GroupsPage() {
-  const router = useRouter();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [testMessageOpen, setTestMessageOpen] = useState(false);
@@ -62,6 +82,8 @@ export default function GroupsPage() {
   );
   const [addGroupOpen, setAddGroupOpen] = useState(false);
   const [newGroupId, setNewGroupId] = useState('');
+  const [editGroupOpen, setEditGroupOpen] = useState(false);
+  const [editGroup, setEditGroup] = useState<EditGroupState | null>(null);
 
   const { data, isLoading, refetch } = trpc.group.list.useQuery({
     page,
@@ -132,6 +154,18 @@ export default function GroupsPage() {
       setNewGroupId('');
       // Refetch after a short delay to allow the queue job to process
       setTimeout(() => refetch(), 2000);
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const updateGroup = trpc.group.update.useMutation({
+    onSuccess: () => {
+      toast.success('Group settings updated');
+      setEditGroupOpen(false);
+      setEditGroup(null);
+      refetch();
     },
     onError: (error) => {
       toast.error(error.message);
@@ -321,7 +355,22 @@ export default function GroupsPage() {
               <RefreshCw className="mr-2 h-4 w-4" />
               Sync Group
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => router.push(`/groups/${row._id}`)}>
+            <DropdownMenuItem
+              onClick={() => {
+                setEditGroup({
+                  id: row._id,
+                  name: row.name,
+                  settings: row.settings || {
+                    maxAdsPerDay: 10,
+                    cooldownMinutes: 30,
+                    allowedAdTypes: 'both',
+                    isActive: true,
+                    requiresApproval: false,
+                  },
+                });
+                setEditGroupOpen(true);
+              }}
+            >
               <Settings className="mr-2 h-4 w-4" />
               Edit Settings
             </DropdownMenuItem>
@@ -587,6 +636,139 @@ export default function GroupsPage() {
             >
               <Plus className="mr-2 h-4 w-4" />
               {addGroup.isPending ? 'Adding...' : 'Add Group'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Group Settings Dialog */}
+      <Dialog open={editGroupOpen} onOpenChange={setEditGroupOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit Group Settings</DialogTitle>
+            <DialogDescription>
+              Configure posting settings for {editGroup?.name}
+            </DialogDescription>
+          </DialogHeader>
+          {editGroup && (
+            <div className="space-y-4 py-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Active</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Enable posting to this group
+                  </p>
+                </div>
+                <Switch
+                  checked={editGroup.settings.isActive}
+                  onCheckedChange={(checked) =>
+                    setEditGroup({
+                      ...editGroup,
+                      settings: { ...editGroup.settings, isActive: checked },
+                    })
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="maxAdsPerDay">Max Ads Per Day</Label>
+                <Input
+                  id="maxAdsPerDay"
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={editGroup.settings.maxAdsPerDay}
+                  onChange={(e) =>
+                    setEditGroup({
+                      ...editGroup,
+                      settings: {
+                        ...editGroup.settings,
+                        maxAdsPerDay: parseInt(e.target.value) || 1,
+                      },
+                    })
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="cooldownMinutes">Cooldown (minutes)</Label>
+                <Input
+                  id="cooldownMinutes"
+                  type="number"
+                  min={1}
+                  max={1440}
+                  value={editGroup.settings.cooldownMinutes}
+                  onChange={(e) =>
+                    setEditGroup({
+                      ...editGroup,
+                      settings: {
+                        ...editGroup.settings,
+                        cooldownMinutes: parseInt(e.target.value) || 1,
+                      },
+                    })
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Minimum time between posts (1-1440 min)
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="allowedAdTypes">Allowed Ad Types</Label>
+                <Select
+                  value={editGroup.settings.allowedAdTypes}
+                  onValueChange={(value: 'onlyfans' | 'casino' | 'both') =>
+                    setEditGroup({
+                      ...editGroup,
+                      settings: { ...editGroup.settings, allowedAdTypes: value },
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="both">Both</SelectItem>
+                    <SelectItem value="onlyfans">OnlyFans Only</SelectItem>
+                    <SelectItem value="casino">Casino Only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Requires Approval</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Posts need manual approval
+                  </p>
+                </div>
+                <Switch
+                  checked={editGroup.settings.requiresApproval}
+                  onCheckedChange={(checked) =>
+                    setEditGroup({
+                      ...editGroup,
+                      settings: { ...editGroup.settings, requiresApproval: checked },
+                    })
+                  }
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditGroupOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!editGroup) return;
+                updateGroup.mutate({
+                  id: editGroup.id,
+                  settings: editGroup.settings,
+                });
+              }}
+              disabled={updateGroup.isPending}
+            >
+              {updateGroup.isPending ? 'Saving...' : 'Save Changes'}
             </Button>
           </DialogFooter>
         </DialogContent>
