@@ -180,9 +180,7 @@ The stop hook runs when Claude is about to finish and **BLOCKS** if:
 
 ### Last Change Format (MANDATORY)
 
-```markdown
-## Last Change
-
+```
 **Branch:** feature/example-feature
 **Date:** YYYY-MM-DD
 **Summary:** 1-2 sentences describing WHAT changed and WHY.
