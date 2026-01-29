@@ -178,7 +178,7 @@ The stop hook runs when Claude is about to finish and **BLOCKS** if:
 | Gotcha discovered | Add to NRY or FORBIDDEN sections |
 | New config added | Update Configuration section |
 
-### Last Change Format (MANDATORY)
+### Session Change Format (MANDATORY)
 
 ```
 **Branch:** feature/example-feature
