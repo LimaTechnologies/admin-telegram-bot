@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** feature/complete-pending-tasks
-**Date:** 2026-01-28
-**Summary:** Completed all 7 pending tasks from bot integration. Added: (1) Campaign posting to bot queue with rotation logic; (2) Message rotation across groups with round-robin; (3) bestPostingHours calculation from PostHistory analytics; (4) Group member count periodic sync; (5) Floating message composer FAB on all dashboard pages; (6) Quick campaign create button in sidebar; (7) Comprehensive Telegram API error handling with error classification, retry logic, and automatic group deactivation.
+**Branch:** chore/external-services-config
+**Date:** 2026-01-29
+**Summary:** Configured external MongoDB (sparksglee.dental:8000/tgadmin) and S3 (s3.sparksglee.dental) services. Created new S3 bucket "telegram-admin" via script. Updated docker-compose.yml to use external services (commented out local MongoDB/MinIO). Added utility scripts for bucket creation and connection testing.
 
 ---
 

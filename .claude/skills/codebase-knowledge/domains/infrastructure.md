@@ -1,9 +1,9 @@
 # Domain: Infrastructure
 
 ## Last Update
-- **Date:** 2026-01-26
-- **Commit:** ef480b4
-- **Summary:** Docker Compose multi-service setup
+- **Date:** 2026-01-29
+- **Commit:** chore/external-services-config
+- **Summary:** Configured external MongoDB and S3 services, added utility scripts
 
 ## Files
 
@@ -14,10 +14,14 @@
 - `docker/worker/Dockerfile` - BullMQ workers
 
 ### Configuration
-- `.env.example` - Environment variables template
+- `.env` - Production environment variables
+- `.env.local` - Development environment variables
 - `tsconfig.json` - TypeScript configuration
 - `next.config.ts` - Next.js configuration
-- `tailwind.config.ts` - Tailwind CSS configuration
+
+### Scripts
+- `scripts/create-s3-bucket.ts` - Creates S3 bucket for file storage
+- `scripts/test-connections.ts` - Tests MongoDB and S3 connectivity
 
 ### Services
 - `services/bot/` - grammY Telegram bot
@@ -43,9 +47,9 @@ services:
   dashboard:  # Next.js on :3000
   bot:        # grammY bot (webhook mode)
   worker:     # BullMQ processors (scalable)
-  redis:      # Queue backend on :6379
-  mongodb:    # Database on :27017
-  minio:      # S3-compatible storage on :9000
+  redis:      # Queue backend on :6379 (local)
+  # mongodb:  # EXTERNAL: sparksglee.dental:8000
+  # minio:    # EXTERNAL: s3.sparksglee.dental
 ```
 
 ### Queue Architecture
@@ -64,28 +68,30 @@ System Queues
 
 ### Environment Variables
 ```env
-# Database
-MONGODB_URI=mongodb://...
+# Database (External MongoDB)
+MONGODB_URI=mongodb://user:pass@sparksglee.dental:8000/tgadmin
 
-# Redis
-REDIS_HOST=redis
+# Redis (Local)
+REDIS_HOST=127.0.0.1
 REDIS_PORT=6379
 
 # Auth
 SESSION_SECRET=...
 MAGIC_LINK_SECRET=...
 
-# Email (Gmail SMTP)
-SMTP_HOST=smtp.gmail.com
+# Email
+SMTP_HOST=...
 SMTP_USER=...
-SMTP_PASSWORD=... # App password, not regular
+SMTP_PASSWORD=...
 
 # Telegram
 TELEGRAM_BOT_TOKEN=...
 
-# Storage
-S3_ENDPOINT=http://minio:9000
-S3_BUCKET=creatives
+# Storage (External S3)
+S3_ENDPOINT=https://s3.sparksglee.dental
+S3_BUCKET=telegram-admin
+S3_ACCESS_KEY=...
+S3_SECRET_KEY=...
 ```
 
 ### Gotchas
@@ -94,3 +100,6 @@ S3_BUCKET=creatives
 - Worker concurrency configurable via env
 - Bot token stored in Settings model (single source)
 - Gmail requires App Password (2FA must be enabled)
+- MongoDB and S3 are EXTERNAL services (not in docker-compose)
+- Run `bun run scripts/create-s3-bucket.ts` to create the S3 bucket
+- Run `bun run scripts/test-connections.ts` to verify connectivity
