@@ -444,6 +444,48 @@ export const queueRouter = router({
       };
     }),
 
+  // Calculate best posting hours for all groups
+  calculateBestHours: adminProcedure
+    .use(
+      withAudit({
+        action: 'queue.retryJob', // Using existing action
+        entityType: 'queue',
+      })
+    )
+    .mutation(async () => {
+      const job = await analyticsQueue.add(
+        'best-hours',
+        { type: 'best-hours' },
+        { priority: 2 }
+      );
+
+      return {
+        jobId: job.id,
+        message: 'Best posting hours calculation started',
+      };
+    }),
+
+  // Sync member counts for all groups
+  syncMemberCounts: adminProcedure
+    .use(
+      withAudit({
+        action: 'queue.retryJob', // Using existing action
+        entityType: 'queue',
+      })
+    )
+    .mutation(async () => {
+      const job = await analyticsQueue.add(
+        'member-sync',
+        { type: 'member-sync' },
+        { priority: 2 }
+      );
+
+      return {
+        jobId: job.id,
+        message: 'Member count sync started',
+      };
+    }),
+
   // Create a scheduled message job
   scheduleMessage: adminProcedure
     .input(

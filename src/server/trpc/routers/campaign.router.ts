@@ -2,7 +2,13 @@ import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure, operatorProcedure } from '../trpc';
 import { withAudit } from '../middleware/audit.middleware';
-import { Campaign } from '@common';
+import {
+  Campaign,
+  postCampaignMessage,
+  postCampaignToAllGroups,
+  scheduleCampaignPosts,
+  resetRotationState,
+} from '@common';
 
 const createCampaignSchema = z.object({
   name: z.string().min(1).max(200),
@@ -207,7 +213,12 @@ export const campaignRouter = router({
 
   // Start campaign
   start: operatorProcedure
-    .input(z.object({ id: z.string() }))
+    .input(
+      z.object({
+        id: z.string(),
+        postImmediately: z.boolean().default(false),
+      })
+    )
     .use(
       withAudit({
         action: 'campaign.start',
@@ -224,7 +235,20 @@ export const campaignRouter = router({
       if (!campaign) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Campaign not found' });
       }
-      return campaign.toObject();
+
+      // Reset rotation state on campaign start
+      resetRotationState(input.id);
+
+      // Optionally trigger immediate posting
+      let postingResult;
+      if (input.postImmediately) {
+        postingResult = await postCampaignToAllGroups(input.id);
+      }
+
+      return {
+        campaign: campaign.toObject(),
+        posting: postingResult,
+      };
     }),
 
   // Pause campaign
@@ -247,6 +271,108 @@ export const campaignRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Campaign not found' });
       }
       return campaign.toObject();
+    }),
+
+  // Post one message from campaign (next in rotation)
+  postNow: operatorProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        groupId: z.string().optional(),
+        creativeId: z.string().optional(),
+      })
+    )
+    .use(
+      withAudit({
+        action: 'post.send',
+        entityType: 'campaign',
+        getEntityId: (input) => (input as { id: string }).id,
+      })
+    )
+    .mutation(async ({ input }) => {
+      const campaign = await Campaign.findById(input.id);
+      if (!campaign) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Campaign not found' });
+      }
+      if (campaign.status !== 'active') {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'Campaign must be active to post',
+        });
+      }
+
+      const result = await postCampaignMessage(input.id, input.groupId, input.creativeId);
+
+      if (!result.success && result.errors.length > 0) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: result.errors.join(', '),
+        });
+      }
+
+      return result;
+    }),
+
+  // Post to all groups in campaign
+  postToAll: operatorProcedure
+    .input(z.object({ id: z.string() }))
+    .use(
+      withAudit({
+        action: 'post.send',
+        entityType: 'campaign',
+        getEntityId: (input) => (input as { id: string }).id,
+      })
+    )
+    .mutation(async ({ input }) => {
+      const campaign = await Campaign.findById(input.id);
+      if (!campaign) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Campaign not found' });
+      }
+      if (campaign.status !== 'active') {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'Campaign must be active to post',
+        });
+      }
+
+      const result = await postCampaignToAllGroups(input.id);
+      return result;
+    }),
+
+  // Schedule campaign posts at intervals
+  scheduleInterval: operatorProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        intervalMinutes: z.number().min(5).max(1440).default(60),
+        totalPosts: z.number().min(1).max(100).default(10),
+      })
+    )
+    .use(
+      withAudit({
+        action: 'post.schedule',
+        entityType: 'campaign',
+        getEntityId: (input) => (input as { id: string }).id,
+      })
+    )
+    .mutation(async ({ input }) => {
+      const campaign = await Campaign.findById(input.id);
+      if (!campaign) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Campaign not found' });
+      }
+      if (campaign.status !== 'active') {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'Campaign must be active to schedule posts',
+        });
+      }
+
+      const result = await scheduleCampaignPosts(
+        input.id,
+        input.intervalMinutes,
+        input.totalPosts
+      );
+      return result;
     }),
 
   // Get campaign stats

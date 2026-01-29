@@ -17,6 +17,7 @@ import {
   ScrollText,
   Activity,
   LogOut,
+  Plus,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -83,6 +84,15 @@ export function AppSidebar() {
             <Megaphone className="w-4 h-4 text-primary-foreground" />
           </div>
           <span className="font-semibold text-lg">TG Ads</span>
+        </div>
+        {/* Quick Create Button */}
+        <div className="px-2 pb-2">
+          <Link href="/campaigns/new">
+            <button className="w-full flex items-center justify-center gap-2 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors">
+              <Plus className="w-4 h-4" />
+              New Campaign
+            </button>
+          </Link>
         </div>
       </SidebarHeader>
 

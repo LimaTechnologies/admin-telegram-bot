@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** feature/telegram-bot-integration
+**Branch:** feature/complete-pending-tasks
 **Date:** 2026-01-28
-**Summary:** Fixed two bugs from E2E testing: (1) Overview/Dashboard page now renders at `/` instead of redirecting to `/groups` - deleted redirect file `src/app/page.tsx`. (2) Fixed Edit Settings 404 on Groups page - changed from navigation to `/groups/[id]` to a modal dialog with group settings form. Also fixed Suspense boundary for useSearchParams in `/verify` page.
+**Summary:** Completed all 7 pending tasks from bot integration. Added: (1) Campaign posting to bot queue with rotation logic; (2) Message rotation across groups with round-robin; (3) bestPostingHours calculation from PostHistory analytics; (4) Group member count periodic sync; (5) Floating message composer FAB on all dashboard pages; (6) Quick campaign create button in sidebar; (7) Comprehensive Telegram API error handling with error classification, retry logic, and automatic group deactivation.
 
 ---
 

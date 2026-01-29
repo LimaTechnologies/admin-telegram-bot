@@ -1,4 +1,5 @@
 import type { Job } from 'bullmq';
+import { GrammyError, HttpError } from 'grammy';
 import {
   logger,
   TelegramGroup,
@@ -19,6 +20,187 @@ import type {
 
 // Rate limiting: Telegram allows 30 messages per second
 const RATE_LIMIT_DELAY_MS = 50; // ~20 req/sec to be safe
+
+/**
+ * Telegram API Error Codes
+ */
+const TELEGRAM_ERRORS = {
+  // Recoverable errors (retry with backoff)
+  TOO_MANY_REQUESTS: 429,
+  FLOOD_WAIT: 420,
+  INTERNAL_SERVER_ERROR: 500,
+  SERVICE_UNAVAILABLE: 503,
+
+  // Permission/access errors (don't retry)
+  BOT_BLOCKED: 403,
+  CHAT_NOT_FOUND: 400,
+  USER_DEACTIVATED: 403,
+  BOT_KICKED: 403,
+  CHAT_WRITE_FORBIDDEN: 403,
+
+  // Invalid request errors (don't retry)
+  BAD_REQUEST: 400,
+  UNAUTHORIZED: 401,
+} as const;
+
+/**
+ * Classify Telegram API errors
+ */
+interface TelegramErrorInfo {
+  isRecoverable: boolean;
+  shouldDeactivateGroup: boolean;
+  retryAfter?: number;
+  errorType: string;
+  message: string;
+}
+
+function classifyTelegramError(error: unknown): TelegramErrorInfo {
+  // Default error info
+  const defaultInfo: TelegramErrorInfo = {
+    isRecoverable: false,
+    shouldDeactivateGroup: false,
+    errorType: 'UNKNOWN',
+    message: error instanceof Error ? error.message : 'Unknown error',
+  };
+
+  if (error instanceof GrammyError) {
+    const description = error.description.toLowerCase();
+
+    // Rate limiting - recoverable with retry
+    if (error.error_code === TELEGRAM_ERRORS.TOO_MANY_REQUESTS ||
+        description.includes('too many requests') ||
+        description.includes('flood')) {
+      const retryAfter = error.parameters?.retry_after || 30;
+      return {
+        isRecoverable: true,
+        shouldDeactivateGroup: false,
+        retryAfter: retryAfter * 1000,
+        errorType: 'RATE_LIMIT',
+        message: `Rate limited. Retry after ${retryAfter} seconds`,
+      };
+    }
+
+    // Bot blocked or kicked - deactivate group
+    if (error.error_code === TELEGRAM_ERRORS.BOT_BLOCKED ||
+        description.includes('bot was blocked') ||
+        description.includes('bot was kicked') ||
+        description.includes('chat was deleted') ||
+        description.includes('user is deactivated')) {
+      return {
+        isRecoverable: false,
+        shouldDeactivateGroup: true,
+        errorType: 'BOT_BLOCKED',
+        message: 'Bot was blocked or kicked from this chat',
+      };
+    }
+
+    // Chat not found - deactivate group
+    if (description.includes('chat not found') ||
+        description.includes('group chat was deactivated')) {
+      return {
+        isRecoverable: false,
+        shouldDeactivateGroup: true,
+        errorType: 'CHAT_NOT_FOUND',
+        message: 'Chat not found or deactivated',
+      };
+    }
+
+    // Write forbidden - don't retry but don't deactivate
+    if (description.includes('have no rights') ||
+        description.includes('write forbidden') ||
+        description.includes('not enough rights')) {
+      return {
+        isRecoverable: false,
+        shouldDeactivateGroup: false,
+        errorType: 'PERMISSION_DENIED',
+        message: 'Bot does not have permission to send messages',
+      };
+    }
+
+    // Server errors - recoverable with retry
+    if (error.error_code >= 500) {
+      return {
+        isRecoverable: true,
+        shouldDeactivateGroup: false,
+        retryAfter: 5000,
+        errorType: 'SERVER_ERROR',
+        message: 'Telegram server error. Will retry.',
+      };
+    }
+
+    // Bad request - not recoverable
+    if (error.error_code === TELEGRAM_ERRORS.BAD_REQUEST) {
+      return {
+        isRecoverable: false,
+        shouldDeactivateGroup: false,
+        errorType: 'BAD_REQUEST',
+        message: error.description,
+      };
+    }
+
+    return {
+      isRecoverable: false,
+      shouldDeactivateGroup: false,
+      errorType: `TELEGRAM_${error.error_code}`,
+      message: error.description,
+    };
+  }
+
+  if (error instanceof HttpError) {
+    // Network errors - recoverable
+    return {
+      isRecoverable: true,
+      shouldDeactivateGroup: false,
+      retryAfter: 5000,
+      errorType: 'NETWORK_ERROR',
+      message: 'Network error. Will retry.',
+    };
+  }
+
+  return defaultInfo;
+}
+
+/**
+ * Handle Telegram API errors with proper logging and group management
+ */
+async function handleTelegramError(
+  error: unknown,
+  chatId: string,
+  operation: string
+): Promise<TelegramErrorInfo> {
+  const errorInfo = classifyTelegramError(error);
+
+  logger.error(`Telegram API error during ${operation}`, {
+    chatId,
+    errorType: errorInfo.errorType,
+    isRecoverable: errorInfo.isRecoverable,
+    shouldDeactivateGroup: errorInfo.shouldDeactivateGroup,
+    message: errorInfo.message,
+  });
+
+  // Deactivate group if needed
+  if (errorInfo.shouldDeactivateGroup) {
+    try {
+      await TelegramGroup.findOneAndUpdate(
+        { telegramId: chatId },
+        {
+          $set: {
+            'settings.isActive': false,
+            'botPermissions.canPostMessages': false,
+          },
+        }
+      );
+      logger.warn('Group deactivated due to error', {
+        chatId,
+        reason: errorInfo.errorType,
+      });
+    } catch (updateError) {
+      logger.error('Failed to deactivate group', updateError, { chatId });
+    }
+  }
+
+  return errorInfo;
+}
 
 interface RateLimitCheck {
   allowed: boolean;
@@ -235,39 +417,52 @@ async function processSendMessage(data: SendMessageJobData): Promise<{
 
   await rateLimitDelay();
 
-  const bot = await getBot();
-  const result = await bot.api.sendMessage(data.chatId, data.text, {
-    parse_mode: data.parseMode || 'HTML',
-    reply_to_message_id: data.replyToMessageId,
-    disable_notification: data.disableNotification,
-  });
+  try {
+    const bot = await getBot();
+    const result = await bot.api.sendMessage(data.chatId, data.text, {
+      parse_mode: data.parseMode || 'HTML',
+      reply_to_message_id: data.replyToMessageId,
+      disable_notification: data.disableNotification,
+    });
 
-  // Update lastMessageId in database
-  await TelegramGroup.findOneAndUpdate(
-    { telegramId: data.chatId },
-    { $set: { lastMessageId: result.message_id } }
-  );
+    // Update lastMessageId in database
+    await TelegramGroup.findOneAndUpdate(
+      { telegramId: data.chatId },
+      { $set: { lastMessageId: result.message_id } }
+    );
 
-  // Update group statistics (track posts)
-  await updateGroupStatsAfterPost(data.chatId);
+    // Update group statistics (track posts)
+    await updateGroupStatsAfterPost(data.chatId);
 
-  // Get updated rate limit info for response
-  const rateLimit = await checkGroupRateLimit(data.chatId);
+    // Get updated rate limit info for response
+    const rateLimit = await checkGroupRateLimit(data.chatId);
 
-  logger.info('Message sent via queue', {
-    chatId: data.chatId,
-    messageId: result.message_id,
-    adsToday: rateLimit.adsToday,
-    maxAdsPerDay: rateLimit.maxAdsPerDay,
-  });
-
-  return {
-    messageId: result.message_id,
-    rateLimitInfo: {
+    logger.info('Message sent via queue', {
+      chatId: data.chatId,
+      messageId: result.message_id,
       adsToday: rateLimit.adsToday,
       maxAdsPerDay: rateLimit.maxAdsPerDay,
-    },
-  };
+    });
+
+    return {
+      messageId: result.message_id,
+      rateLimitInfo: {
+        adsToday: rateLimit.adsToday,
+        maxAdsPerDay: rateLimit.maxAdsPerDay,
+      },
+    };
+  } catch (error) {
+    const errorInfo = await handleTelegramError(error, data.chatId, 'sendMessage');
+
+    // If recoverable, throw with retry info for BullMQ
+    if (errorInfo.isRecoverable && errorInfo.retryAfter) {
+      const retryError = new Error(errorInfo.message);
+      (retryError as Error & { retryAfter: number }).retryAfter = errorInfo.retryAfter;
+      throw retryError;
+    }
+
+    throw new Error(`${errorInfo.errorType}: ${errorInfo.message}`);
+  }
 }
 
 /**
@@ -280,15 +475,38 @@ async function processDeleteMessage(data: DeleteMessageJobData): Promise<{ succe
 
   await rateLimitDelay();
 
-  const bot = await getBot();
-  await bot.api.deleteMessage(data.chatId, data.messageId);
+  try {
+    const bot = await getBot();
+    await bot.api.deleteMessage(data.chatId, data.messageId);
 
-  logger.info('Message deleted via queue', {
-    chatId: data.chatId,
-    messageId: data.messageId,
-  });
+    logger.info('Message deleted via queue', {
+      chatId: data.chatId,
+      messageId: data.messageId,
+    });
 
-  return { success: true };
+    return { success: true };
+  } catch (error) {
+    const errorInfo = await handleTelegramError(error, data.chatId, 'deleteMessage');
+
+    // Message might already be deleted, which is fine
+    if (errorInfo.errorType === 'BAD_REQUEST' &&
+        errorInfo.message.toLowerCase().includes('message to delete not found')) {
+      logger.warn('Message already deleted or not found', {
+        chatId: data.chatId,
+        messageId: data.messageId,
+      });
+      return { success: true };
+    }
+
+    // If recoverable, throw with retry info
+    if (errorInfo.isRecoverable && errorInfo.retryAfter) {
+      const retryError = new Error(errorInfo.message);
+      (retryError as Error & { retryAfter: number }).retryAfter = errorInfo.retryAfter;
+      throw retryError;
+    }
+
+    throw new Error(`${errorInfo.errorType}: ${errorInfo.message}`);
+  }
 }
 
 /**

@@ -38,5 +38,14 @@ export {
   handleBotPermissionsChanged,
 } from './services/telegram.service';
 
+// Campaign Posting
+export {
+  postCampaignMessage,
+  postCampaignToAllGroups,
+  scheduleCampaignPosts,
+  resetRotationState,
+  getRotationState,
+} from './services/campaign-posting.service';
+
 // Logger
 export { logger } from './services/logger';
