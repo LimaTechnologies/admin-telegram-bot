@@ -21,7 +21,7 @@ function generateToken(): string {
 }
 
 class AuthServiceClass {
-  async sendMagicLink(email: string): Promise<{ success: boolean; message: string }> {
+  async sendMagicLink(email: string, baseUrl: string): Promise<{ success: boolean; message: string }> {
     try {
       // Check if user exists
       const user = await User.findOne({ email, isActive: true });
@@ -47,7 +47,7 @@ class AuthServiceClass {
       });
 
       // Send email
-      const sent = await EmailService.sendMagicLink(email, token);
+      const sent = await EmailService.sendMagicLink(email, token, baseUrl);
       if (!sent) {
         logger.error('Failed to send magic link email', undefined, { email });
         return { success: false, message: 'Failed to send email' };

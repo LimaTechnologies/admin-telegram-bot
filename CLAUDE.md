@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** chore/external-services-config
-**Date:** 2026-01-29
-**Summary:** Configured external MongoDB (sparksglee.dental:8000/tgadmin) and S3 (s3.sparksglee.dental) services. Created new S3 bucket "telegram-admin" via script. Updated docker-compose.yml to use external services (commented out local MongoDB/MinIO). Added utility scripts for bucket creation and connection testing.
+**Branch:** refactor/remove-app-url-env
+**Date:** 2026-01-30
+**Summary:** Removed APP_URL environment variable. Magic link URL is now derived from request headers (host + x-forwarded-proto) instead of hardcoded env var. This makes the app work automatically across environments and respects reverse proxy configurations.
 
 ---
 

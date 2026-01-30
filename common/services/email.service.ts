@@ -61,9 +61,8 @@ class EmailServiceClass {
     }
   }
 
-  async sendMagicLink(email: string, token: string): Promise<boolean> {
-    const appUrl = process.env['APP_URL'] || 'http://localhost:3000';
-    const magicLink = `${appUrl}/verify?token=${token}`;
+  async sendMagicLink(email: string, token: string, baseUrl: string): Promise<boolean> {
+    const magicLink = `${baseUrl}/verify?token=${token}`;
 
     const html = `
       <!DOCTYPE html>

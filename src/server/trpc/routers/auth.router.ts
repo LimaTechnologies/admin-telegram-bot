@@ -41,7 +41,12 @@ export const authRouter = router({
       }
 
       // Normal magic link flow
-      const result = await AuthService.sendMagicLink(input.email);
+      const host = ctx.req.headers.get('host') || 'localhost:3000';
+      const protocol = ctx.req.headers.get('x-forwarded-proto') ||
+        (process.env['NODE_ENV'] === 'production' ? 'https' : 'http');
+      const baseUrl = `${protocol}://${host}`;
+
+      const result = await AuthService.sendMagicLink(input.email, baseUrl);
       return result;
     }),
 

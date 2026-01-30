@@ -1,9 +1,9 @@
 # Domain: Authentication
 
 ## Last Update
-- **Date:** 2026-01-27
-- **Commit:** 066c8e5
-- **Summary:** Added dev bypass for first admin user (joaovitor_rlima@hotmail.com)
+- **Date:** 2026-01-30
+- **Commit:** pending
+- **Summary:** Removed APP_URL env var. Magic link URL now derived from request headers (host + x-forwarded-proto)
 
 ## Files
 
@@ -67,3 +67,4 @@
 - Logout clears both cookie and database session
 - DEV_BYPASS_EMAIL in auth.service.ts allows direct login without email service
 - Dev bypass auto-creates admin user if not exists in database
+- Magic link URL is derived from request headers (host + x-forwarded-proto), no APP_URL env needed
