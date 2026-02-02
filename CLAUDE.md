@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** refactor/remove-app-url-env
-**Date:** 2026-01-30
-**Summary:** Removed APP_URL environment variable. Magic link URL is now derived from request headers (host + x-forwarded-proto) instead of hardcoded env var. This makes the app work automatically across environments and respects reverse proxy configurations.
+**Branch:** chore/vercel-config
+**Date:** 2026-02-02
+**Summary:** Fixed Next.js config for Vercel deployment. Removed `output: 'standalone'` when deploying to Vercel (standalone is Docker-only). Added .env*.local to gitignore. Note: Site returns 404/401 due to Vercel Deployment Protection - must disable in Vercel Dashboard → Settings → Deployment Protection.
 
 ---
 
