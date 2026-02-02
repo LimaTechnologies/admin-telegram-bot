@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** chore/admin-scripts
+**Branch:** fix/login-redirect
 **Date:** 2026-02-02
-**Summary:** Added delete-admin.ts script for recreating admin users. Fixed Vercel deployment (404 issue), added Husky pre-push hooks, disabled preview deployments.
+**Summary:** Fixed login redirect - was redirecting to non-existent `/dashboard`, now redirects to `/` (root). Dashboard is served at root via `(dashboard)` route group.
 
 ---
 
