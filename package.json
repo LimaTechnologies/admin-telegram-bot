@@ -15,7 +15,9 @@
     "worker:dev": "tsx services/worker/src/index.ts",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
-    "docker:build": "docker compose build"
+    "docker:build": "docker compose build",
+    "push": "git push origin main && git push deploy main",
+    "prepare": "husky"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.975.0",
@@ -81,6 +83,7 @@
     "@vitejs/plugin-react": "^5.1.2",
     "eslint": "^9",
     "eslint-config-next": "16.1.5",
+    "husky": "^9.1.7",
     "jsdom": "^27.4.0",
     "mongodb-memory-server": "^11.0.1",
     "tailwindcss": "^4",

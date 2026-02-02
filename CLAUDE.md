@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** fix/dashboard-route-conflict
+**Branch:** chore/git-hooks
 **Date:** 2026-02-02
-**Summary:** Fixed route conflict. Removed `src/app/page.tsx` that redirected to non-existent `/dashboard`. The `(dashboard)` route group serves content at `/` directly (not `/dashboard/*`). Dashboard accessible at `/`, redirects to `/login` if not authenticated.
+**Summary:** Added Husky pre-push hook that runs typecheck, lint, and build before allowing push. Added `bun run push` script to push to both remotes (origin + deploy) automatically.
 
 ---
 

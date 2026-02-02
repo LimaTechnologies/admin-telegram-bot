@@ -1,0 +1,29 @@
+#!/bin/sh
+
+echo "Running pre-push checks..."
+
+# Run typecheck
+echo "Running typecheck..."
+bun run typecheck
+if [ $? -ne 0 ]; then
+  echo "Typecheck failed. Push aborted."
+  exit 1
+fi
+
+# Run lint
+echo "Running lint..."
+bun run lint
+if [ $? -ne 0 ]; then
+  echo "Lint failed. Push aborted."
+  exit 1
+fi
+
+# Run build
+echo "Running build..."
+bun run build
+if [ $? -ne 0 ]; then
+  echo "Build failed. Push aborted."
+  exit 1
+fi
+
+echo "All checks passed!"

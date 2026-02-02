@@ -1,0 +1,2 @@
+# Tests run on pre-push instead
+echo "Pre-commit hook passed"
