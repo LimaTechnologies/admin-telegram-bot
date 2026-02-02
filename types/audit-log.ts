@@ -6,6 +6,7 @@ export type AuditAction =
   | 'user.delete'
   | 'user.login'
   | 'user.logout'
+  | 'user.resetPassword'
   | 'group.create'
   | 'group.update'
   | 'group.delete'

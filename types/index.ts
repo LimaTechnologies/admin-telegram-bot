@@ -1,7 +1,6 @@
 // User & Auth Types
 export * from './user';
 export * from './session';
-export * from './magic-link';
 
 // Core Business Types
 export * from './telegram-group';

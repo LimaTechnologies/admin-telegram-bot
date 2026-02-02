@@ -19,7 +19,6 @@ export {
 
 // Services
 export { AuthService } from './services/auth.service';
-export { EmailService } from './services/email.service';
 export { AuditService } from './services/audit.service';
 export { StorageService } from './services/storage.service';
 export {

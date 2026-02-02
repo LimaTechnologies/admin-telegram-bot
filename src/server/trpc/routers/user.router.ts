@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { router, adminProcedure, protectedProcedure } from '../trpc';
 import { withAudit } from '../middleware/audit.middleware';
-import { User } from '@common';
+import { User, AuthService } from '@common';
 
 const createUserSchema = z.object({
   email: z.string().email(),
@@ -47,7 +47,7 @@ export const userRouter = router({
           .sort({ createdAt: -1 })
           .skip((page - 1) * limit)
           .limit(limit)
-          .select('-__v'),
+          .select('-__v -passwordHash'),
         User.countDocuments(filter),
       ]);
 
@@ -61,24 +61,23 @@ export const userRouter = router({
     }),
 
   // Get single user
-  getById: adminProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ input }) => {
-      const user = await User.findById(input.id).select('-__v');
-      if (!user) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
-      }
-      return user.toObject();
-    }),
+  getById: adminProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
+    const user = await User.findById(input.id).select('-__v -passwordHash');
+    if (!user) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
+    }
+    return user.toObject();
+  }),
 
-  // Create user (admin only)
+  // Create user (admin only) - generates random password
   create: adminProcedure
     .input(createUserSchema)
     .use(
       withAudit({
         action: 'user.create',
         entityType: 'user',
-        getAfter: (_, result) => result,
+        getAfter: (_, result) =>
+          (result as { user: unknown; temporaryPassword: string }).user,
       })
     )
     .mutation(async ({ input }) => {
@@ -88,12 +87,52 @@ export const userRouter = router({
         throw new TRPCError({ code: 'CONFLICT', message: 'Email already exists' });
       }
 
-      const user = await User.create({
-        ...input,
-        email: input.email.toLowerCase(),
-      });
+      // Create user with generated password
+      const result = await AuthService.createUserWithPassword(input.email, input.name, input.role);
 
-      return user.toObject();
+      if (!result) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to create user' });
+      }
+
+      // Return user AND the temporary password (only time it's shown)
+      return {
+        user: result.user,
+        temporaryPassword: result.temporaryPassword,
+      };
+    }),
+
+  // Reset user password (admin only) - generates new random password
+  resetPassword: adminProcedure
+    .input(z.object({ id: z.string() }))
+    .use(
+      withAudit({
+        action: 'user.resetPassword',
+        entityType: 'user',
+        getEntityId: (input) => (input as { id: string }).id,
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      // Prevent resetting own password this way
+      if (input.id === ctx.session.userId) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Use change password for your own account',
+        });
+      }
+
+      const result = await AuthService.resetPassword(input.id);
+
+      if (!result.success || !result.temporaryPassword) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: result.message || 'User not found',
+        });
+      }
+
+      return {
+        success: true,
+        temporaryPassword: result.temporaryPassword,
+      };
     }),
 
   // Update user (admin only)
@@ -114,7 +153,9 @@ export const userRouter = router({
     .mutation(async ({ input }) => {
       const { id, ...data } = input;
 
-      const user = await User.findByIdAndUpdate(id, data, { new: true }).select('-__v');
+      const user = await User.findByIdAndUpdate(id, data, { new: true }).select(
+        '-__v -passwordHash'
+      );
       if (!user) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
       }
@@ -152,7 +193,7 @@ export const userRouter = router({
 
   // Get current user profile
   me: protectedProcedure.query(async ({ ctx }) => {
-    const user = await User.findById(ctx.session.userId).select('-__v');
+    const user = await User.findById(ctx.session.userId).select('-__v -passwordHash');
     if (!user) {
       throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
     }
@@ -167,7 +208,7 @@ export const userRouter = router({
         ctx.session.userId,
         { name: input.name },
         { new: true }
-      ).select('-__v');
+      ).select('-__v -passwordHash');
 
       if (!user) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });

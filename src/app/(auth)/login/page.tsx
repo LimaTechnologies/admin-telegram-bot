@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { Mail, Loader2, Send } from 'lucide-react';
+import { Lock, Loader2, LogIn, Eye, EyeOff } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,81 +28,43 @@ import {
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email'),
+  password: z.string().min(1, 'Password is required'),
 });
 
 type LoginForm = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
-  const [sent, setSent] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
 
   const form = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: '' },
+    defaultValues: { email: '', password: '' },
   });
 
-  const sendMagicLink = trpc.auth.sendMagicLink.useMutation({
-    onSuccess: (data) => {
-      // Check if this was a direct login (dev bypass)
-      if ('directLogin' in data && data.directLogin) {
-        toast.success('Logged in successfully!');
-        router.push('/groups');
-        return;
-      }
-      // Normal magic link flow
-      setSent(true);
-      toast.success('Check your email for the login link');
+  const loginMutation = trpc.auth.login.useMutation({
+    onSuccess: () => {
+      toast.success('Logged in successfully!');
+      router.push('/dashboard');
     },
     onError: (error) => {
-      toast.error(error.message || 'Failed to send login link');
+      toast.error(error.message || 'Invalid email or password');
     },
   });
 
   const onSubmit = (data: LoginForm) => {
-    sendMagicLink.mutate(data);
+    loginMutation.mutate(data);
   };
-
-  if (sent) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/20 p-4">
-        <Card className="w-full max-w-md backdrop-blur-sm bg-card/80 border-border/50">
-          <CardHeader className="text-center">
-            <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-              <Mail className="w-6 h-6 text-primary" />
-            </div>
-            <CardTitle className="text-2xl">Check your email</CardTitle>
-            <CardDescription>
-              We sent a magic link to <strong>{form.getValues('email')}</strong>
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-center text-sm text-muted-foreground">
-              Click the link in your email to sign in. The link expires in 15 minutes.
-            </p>
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => setSent(false)}
-            >
-              Use a different email
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/20 p-4">
       <Card className="w-full max-w-md backdrop-blur-sm bg-card/80 border-border/50">
         <CardHeader className="text-center">
           <div className="mx-auto w-12 h-12 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center mb-4">
-            <Send className="w-6 h-6 text-primary-foreground" />
+            <Lock className="w-6 h-6 text-primary-foreground" />
           </div>
           <CardTitle className="text-2xl">Welcome back</CardTitle>
-          <CardDescription>
-            Enter your email to receive a magic link
-          </CardDescription>
+          <CardDescription>Enter your credentials to sign in</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -125,20 +87,49 @@ export default function LoginPage() {
                   </FormItem>
                 )}
               />
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={sendMagicLink.isPending}
-              >
-                {sendMagicLink.isPending ? (
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Password</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <Input
+                          type={showPassword ? 'text' : 'password'}
+                          placeholder="Enter your password"
+                          autoComplete="current-password"
+                          {...field}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                          onClick={() => setShowPassword(!showPassword)}
+                        >
+                          {showPassword ? (
+                            <EyeOff className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <Eye className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </Button>
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <Button type="submit" className="w-full" disabled={loginMutation.isPending}>
+                {loginMutation.isPending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Sending...
+                    Signing in...
                   </>
                 ) : (
                   <>
-                    <Mail className="mr-2 h-4 w-4" />
-                    Send Magic Link
+                    <LogIn className="mr-2 h-4 w-4" />
+                    Sign In
                   </>
                 )}
               </Button>

@@ -9,65 +9,77 @@ test.describe('Authentication Flow', () => {
 
     // Check main elements
     await expect(page.getByText('Welcome back')).toBeVisible();
-    await expect(page.getByText('Enter your email to receive a magic link')).toBeVisible();
+    await expect(page.getByText('Enter your credentials to sign in')).toBeVisible();
     await expect(page.getByRole('textbox', { name: /email/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /send magic link/i })).toBeVisible();
+    await expect(page.locator('input[type="password"]')).toBeVisible();
+    await expect(page.getByRole('button', { name: /sign in/i })).toBeVisible();
   });
 
   test('login form validates email input', async ({ page }) => {
     await page.goto('/login');
 
     const emailInput = page.getByRole('textbox', { name: /email/i });
-    const submitButton = page.getByRole('button', { name: /send magic link/i });
+    const submitButton = page.getByRole('button', { name: /sign in/i });
 
     // Empty email should not submit (HTML5 validation)
     await submitButton.click();
     await expect(emailInput).toBeFocused();
   });
 
-  test('login form accepts valid email', async ({ page }) => {
+  test('login form accepts valid email and password', async ({ page }) => {
     await page.goto('/login');
 
     const emailInput = page.getByRole('textbox', { name: /email/i });
+    const passwordInput = page.locator('input[type="password"]');
 
-    // Fill valid email
+    // Fill valid credentials
     await emailInput.fill('admin@example.com');
+    await passwordInput.fill('password123');
     await expect(emailInput).toHaveValue('admin@example.com');
+    await expect(passwordInput).toHaveValue('password123');
   });
 
-  test('verify page shows loading state', async ({ page }) => {
-    await page.goto('/verify?token=test-token');
+  test('password visibility toggle works', async ({ page }) => {
+    await page.goto('/login');
 
-    // Should show verifying message initially
-    await expect(page.getByText('Verifying...')).toBeVisible();
+    const passwordInput = page.locator('input[placeholder="Enter your password"]');
+    const toggleButton = page.locator('button').filter({ has: page.locator('svg') }).last();
+
+    // Initially password should be hidden
+    await expect(passwordInput).toHaveAttribute('type', 'password');
+
+    // Click toggle to show password
+    await toggleButton.click();
+    await expect(passwordInput).toHaveAttribute('type', 'text');
+
+    // Click toggle to hide password again
+    await toggleButton.click();
+    await expect(passwordInput).toHaveAttribute('type', 'password');
   });
 
-  test('verify page shows error for invalid token', async ({ page }) => {
-    await page.goto('/verify?token=invalid-token-123');
+  test('login with invalid credentials shows error', async ({ page }) => {
+    await page.goto('/login');
 
-    // Wait for verification to complete
-    await page.waitForSelector('text=Verification Failed', { timeout: 10000 });
+    const emailInput = page.getByRole('textbox', { name: /email/i });
+    const passwordInput = page.locator('input[type="password"]');
+    const submitButton = page.getByRole('button', { name: /sign in/i });
 
-    // Should show error state
-    await expect(page.getByText('Verification Failed')).toBeVisible();
-    await expect(page.getByRole('button', { name: /try again/i })).toBeVisible();
-  });
+    // Fill invalid credentials
+    await emailInput.fill('invalid@example.com');
+    await passwordInput.fill('wrongpassword');
+    await submitButton.click();
 
-  test('try again button redirects to login', async ({ page }) => {
-    await page.goto('/verify?token=invalid-token');
-
-    // Wait for error state
-    await page.waitForSelector('text=Verification Failed', { timeout: 10000 });
-
-    // Click try again
-    await page.getByRole('button', { name: /try again/i }).click();
-
-    // Should redirect to login
-    await expect(page).toHaveURL(/\/login/);
+    // Should show error toast (wait for it)
+    await expect(page.getByText(/invalid email or password/i)).toBeVisible({ timeout: 10000 });
   });
 });
 
 test.describe('Protected Routes', () => {
+  test('dashboard redirects to login when unauthenticated', async ({ page }) => {
+    await page.goto('/dashboard');
+    await expect(page).toHaveURL(/\/login/);
+  });
+
   test('groups page redirects to login when unauthenticated', async ({ page }) => {
     await page.goto('/groups');
     await expect(page).toHaveURL(/\/login/);
@@ -126,5 +138,13 @@ test.describe('Protected Routes', () => {
   test('queue-monitor page redirects to login when unauthenticated', async ({ page }) => {
     await page.goto('/queue-monitor');
     await expect(page).toHaveURL(/\/login/);
+  });
+});
+
+test.describe('Root Page Redirect', () => {
+  test('root page redirects to dashboard', async ({ page }) => {
+    await page.goto('/');
+    // Should redirect to dashboard, which redirects to login (unauthenticated)
+    await expect(page).toHaveURL(/\/(dashboard|login)/);
   });
 });

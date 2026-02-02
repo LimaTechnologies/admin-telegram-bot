@@ -1,6 +1,5 @@
 export { User, type UserDocument } from './user.model';
 export { Session, type SessionDocument } from './session.model';
-export { MagicLink, type MagicLinkDocument } from './magic-link.model';
 export { TelegramGroup, type TelegramGroupDocument } from './telegram-group.model';
 export { Campaign, type CampaignDocument } from './campaign.model';
 export { Creative, type CreativeDocument } from './creative.model';

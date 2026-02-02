@@ -18,6 +18,10 @@ const userSchema = new Schema<UserDocument>(
       required: true,
       trim: true,
     },
+    passwordHash: {
+      type: String,
+      required: true,
+    },
     role: {
       type: String,
       enum: ['admin', 'operator', 'viewer'] as UserRole[],

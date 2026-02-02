@@ -7,10 +7,23 @@ WORKDIR /app
 COPY package.json bun.lockb* ./
 RUN bun install --frozen-lockfile
 
-# Copy source code
+# Copy source code (excluding .env files via .dockerignore)
 COPY . .
 
-# Build Next.js
+# Remove any .env files that might have been copied
+RUN rm -f .env .env.local .env.development .env.development.local
+
+# Build Next.js with explicit production env
+# Dummy env vars for build (actual values provided at runtime)
+ENV NODE_ENV=production
+ENV MONGODB_URI=mongodb://localhost:27017/dummy
+ENV REDIS_HOST=localhost
+ENV REDIS_PORT=6379
+ENV BOT_TOKEN=dummy
+ENV S3_ENDPOINT=http://localhost:9000
+ENV S3_ACCESS_KEY=dummy
+ENV S3_SECRET_KEY=dummy
+ENV S3_BUCKET=dummy
 RUN bun run build
 
 # Production stage

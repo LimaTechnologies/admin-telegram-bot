@@ -1,16 +1,13 @@
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 import { User } from '../models/user.model';
 import { Session } from '../models/session.model';
-import { MagicLink } from '../models/magic-link.model';
-import { EmailService } from './email.service';
 import { logger } from './logger';
-import type { IUser, SessionContext } from '$types/index';
+import type { IUser, IUserPublic, SessionContext } from '$types/index';
 
 const SESSION_EXPIRY_DAYS = parseInt(process.env['SESSION_EXPIRY_DAYS'] || '7', 10);
-const MAGIC_LINK_EXPIRY_MINUTES = parseInt(process.env['MAGIC_LINK_EXPIRY_MINUTES'] || '15', 10);
-
-// Development bypass email - auto-authenticates without magic link
-const DEV_BYPASS_EMAIL = 'joaovitor_rlima@hotmail.com';
+const BCRYPT_SALT_ROUNDS = 12;
+const PASSWORD_LENGTH = 16;
 
 function hashToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
@@ -20,141 +17,105 @@ function generateToken(): string {
   return crypto.randomBytes(32).toString('hex');
 }
 
+/**
+ * Generate a secure random password with mixed characters
+ */
+function generateSecurePassword(length: number = PASSWORD_LENGTH): string {
+  const uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // Excluding I, O for readability
+  const lowercase = 'abcdefghjkmnpqrstuvwxyz'; // Excluding i, l, o for readability
+  const numbers = '23456789'; // Excluding 0, 1 for readability
+  const symbols = '!@#$%&*';
+
+  const allChars = uppercase + lowercase + numbers + symbols;
+
+  // Ensure at least one of each type
+  let password = '';
+  password += uppercase[crypto.randomInt(uppercase.length)];
+  password += lowercase[crypto.randomInt(lowercase.length)];
+  password += numbers[crypto.randomInt(numbers.length)];
+  password += symbols[crypto.randomInt(symbols.length)];
+
+  // Fill the rest randomly
+  for (let i = password.length; i < length; i++) {
+    password += allChars[crypto.randomInt(allChars.length)];
+  }
+
+  // Shuffle the password
+  const shuffled = password
+    .split('')
+    .sort(() => crypto.randomInt(3) - 1)
+    .join('');
+  return shuffled;
+}
+
+/**
+ * Strip password hash from user object for public consumption
+ */
+function toPublicUser(user: IUser): IUserPublic {
+  const { passwordHash: _, ...publicUser } = user;
+  return publicUser as IUserPublic;
+}
+
 class AuthServiceClass {
-  async sendMagicLink(email: string, baseUrl: string): Promise<{ success: boolean; message: string }> {
-    try {
-      // Check if user exists
-      const user = await User.findOne({ email, isActive: true });
-      if (!user) {
-        // Return success even if user doesn't exist to prevent enumeration
-        logger.warn('Magic link requested for non-existent user', { email });
-        return { success: true, message: 'If an account exists, you will receive an email' };
-      }
-
-      // Delete any existing magic links for this email
-      await MagicLink.deleteMany({ email });
-
-      // Generate new token
-      const token = generateToken();
-      const tokenHash = hashToken(token);
-      const expiresAt = new Date(Date.now() + MAGIC_LINK_EXPIRY_MINUTES * 60 * 1000);
-
-      // Save magic link
-      await MagicLink.create({
-        email,
-        tokenHash,
-        expiresAt,
-      });
-
-      // Send email
-      const sent = await EmailService.sendMagicLink(email, token, baseUrl);
-      if (!sent) {
-        logger.error('Failed to send magic link email', undefined, { email });
-        return { success: false, message: 'Failed to send email' };
-      }
-
-      logger.info('Magic link sent', { email });
-      return { success: true, message: 'If an account exists, you will receive an email' };
-    } catch (error) {
-      logger.error('Error sending magic link', error);
-      return { success: false, message: 'An error occurred' };
-    }
-  }
-
   /**
-   * Check if email is eligible for dev bypass (direct login without magic link)
+   * Create a new user with a generated password
+   * Returns both the user and the temporary password (shown only once)
    */
-  isDevBypassEmail(email: string): boolean {
-    return email.toLowerCase() === DEV_BYPASS_EMAIL.toLowerCase();
-  }
-
-  /**
-   * Direct login for development - bypasses magic link for specific email
-   * Creates admin user if not exists, then creates session
-   */
-  async devLogin(
+  async createUserWithPassword(
     email: string,
-    ipAddress?: string,
-    userAgent?: string
-  ): Promise<{ success: boolean; sessionToken?: string; user?: IUser; message?: string }> {
+    name: string,
+    role: 'admin' | 'operator' | 'viewer'
+  ): Promise<{ user: IUserPublic; temporaryPassword: string } | null> {
     try {
-      // Only allow for the specific dev email
-      if (!this.isDevBypassEmail(email)) {
-        return { success: false, message: 'Dev login not allowed for this email' };
-      }
+      const temporaryPassword = generateSecurePassword();
+      const passwordHash = await bcrypt.hash(temporaryPassword, BCRYPT_SALT_ROUNDS);
 
-      // Find or create the admin user
-      let user = await User.findOne({ email: email.toLowerCase() });
-
-      if (!user) {
-        // Create admin user if it doesn't exist
-        user = await User.create({
-          email: email.toLowerCase(),
-          name: 'Admin',
-          role: 'admin',
-          isActive: true,
-        });
-        logger.info('Dev admin user created', { email });
-      }
-
-      if (!user.isActive) {
-        return { success: false, message: 'User is inactive' };
-      }
-
-      // Create session directly
-      const sessionToken = generateToken();
-      const sessionTokenHash = hashToken(sessionToken);
-      const expiresAt = new Date(Date.now() + SESSION_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
-
-      await Session.create({
-        userId: user._id,
-        tokenHash: sessionTokenHash,
-        expiresAt,
-        ipAddress,
-        userAgent,
+      const user = await User.create({
+        email: email.toLowerCase(),
+        name,
+        role,
+        passwordHash,
+        isActive: true,
       });
 
-      // Update last login
-      user.lastLoginAt = new Date();
-      await user.save();
+      logger.info('User created with password', { userId: user._id.toString(), email });
 
-      logger.info('Dev login successful', { userId: user._id.toString(), email: user.email });
-      return { success: true, sessionToken, user: user.toObject() };
+      return {
+        user: toPublicUser(user.toObject()),
+        temporaryPassword,
+      };
     } catch (error) {
-      logger.error('Error in dev login', error);
-      return { success: false, message: 'An error occurred' };
+      logger.error('Error creating user with password', error);
+      return null;
     }
   }
 
-  async verifyMagicLink(
-    token: string,
+  /**
+   * Authenticate user with email and password
+   */
+  async login(
+    email: string,
+    password: string,
     ipAddress?: string,
     userAgent?: string
-  ): Promise<{ success: boolean; sessionToken?: string; user?: IUser; message?: string }> {
+  ): Promise<{ success: boolean; sessionToken?: string; user?: IUserPublic; message?: string }> {
     try {
-      const tokenHash = hashToken(token);
+      // Find user by email
+      const user = await User.findOne({ email: email.toLowerCase(), isActive: true });
 
-      // Find magic link
-      const magicLink = await MagicLink.findOne({
-        tokenHash,
-        expiresAt: { $gt: new Date() },
-        usedAt: null,
-      });
-
-      if (!magicLink) {
-        logger.warn('Invalid or expired magic link used');
-        return { success: false, message: 'Invalid or expired link' };
-      }
-
-      // Find user
-      const user = await User.findOne({ email: magicLink.email, isActive: true });
       if (!user) {
-        return { success: false, message: 'User not found' };
+        // Use generic message to prevent user enumeration
+        logger.warn('Login attempt for non-existent or inactive user', { email });
+        return { success: false, message: 'Invalid email or password' };
       }
 
-      // Mark magic link as used
-      magicLink.usedAt = new Date();
-      await magicLink.save();
+      // Verify password
+      const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+
+      if (!isPasswordValid) {
+        logger.warn('Failed login attempt - invalid password', { email });
+        return { success: false, message: 'Invalid email or password' };
+      }
 
       // Create session
       const sessionToken = generateToken();
@@ -174,11 +135,87 @@ class AuthServiceClass {
       await user.save();
 
       logger.info('User logged in', { userId: user._id.toString(), email: user.email });
-      return { success: true, sessionToken, user: user.toObject() };
+      return { success: true, sessionToken, user: toPublicUser(user.toObject()) };
     } catch (error) {
-      logger.error('Error verifying magic link', error);
+      logger.error('Error during login', error);
       return { success: false, message: 'An error occurred' };
     }
+  }
+
+  /**
+   * Change user password
+   */
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string
+  ): Promise<{ success: boolean; message?: string }> {
+    try {
+      const user = await User.findById(userId);
+
+      if (!user) {
+        return { success: false, message: 'User not found' };
+      }
+
+      // Verify current password
+      const isPasswordValid = await bcrypt.compare(currentPassword, user.passwordHash);
+
+      if (!isPasswordValid) {
+        return { success: false, message: 'Current password is incorrect' };
+      }
+
+      // Hash and save new password
+      user.passwordHash = await bcrypt.hash(newPassword, BCRYPT_SALT_ROUNDS);
+      await user.save();
+
+      logger.info('Password changed', { userId });
+      return { success: true };
+    } catch (error) {
+      logger.error('Error changing password', error);
+      return { success: false, message: 'An error occurred' };
+    }
+  }
+
+  /**
+   * Reset user password (admin action) - returns new temporary password
+   */
+  async resetPassword(
+    userId: string
+  ): Promise<{ success: boolean; temporaryPassword?: string; message?: string }> {
+    try {
+      const user = await User.findById(userId);
+
+      if (!user) {
+        return { success: false, message: 'User not found' };
+      }
+
+      const temporaryPassword = generateSecurePassword();
+      user.passwordHash = await bcrypt.hash(temporaryPassword, BCRYPT_SALT_ROUNDS);
+      await user.save();
+
+      // Invalidate all existing sessions for this user
+      await Session.deleteMany({ userId });
+
+      logger.info('Password reset by admin', { userId });
+      return { success: true, temporaryPassword };
+    } catch (error) {
+      logger.error('Error resetting password', error);
+      return { success: false, message: 'An error occurred' };
+    }
+  }
+
+  /**
+   * Hash a password (used by user router when creating users)
+   */
+  async hashPassword(password: string): Promise<string> {
+    return bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
+  }
+
+  /**
+   * Generate a secure random password
+   */
+  generatePassword(): string {
+    return generateSecurePassword();
   }
 
   async validateSession(sessionToken: string): Promise<SessionContext | null> {
@@ -242,22 +279,6 @@ class AuthServiceClass {
       return result.deletedCount;
     } catch (error) {
       logger.error('Error cleaning up sessions', error);
-      return 0;
-    }
-  }
-
-  async cleanupExpiredMagicLinks(): Promise<number> {
-    try {
-      const result = await MagicLink.deleteMany({
-        $or: [
-          { expiresAt: { $lt: new Date() } },
-          { usedAt: { $ne: null } },
-        ],
-      });
-      logger.info('Cleaned up expired magic links', { count: result.deletedCount });
-      return result.deletedCount;
-    } catch (error) {
-      logger.error('Error cleaning up magic links', error);
       return 0;
     }
   }

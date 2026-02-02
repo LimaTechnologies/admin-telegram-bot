@@ -4,95 +4,77 @@ import { cookies } from 'next/headers';
 import { router, publicProcedure, protectedProcedure } from '../trpc';
 import { AuthService, AuditService, User } from '@common';
 
+const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1, 'Password is required'),
+});
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8, 'Password must be at least 8 characters'),
+});
+
 export const authRouter = router({
-  // Send magic link (or auto-login for dev bypass email)
-  sendMagicLink: publicProcedure
-    .input(z.object({ email: z.string().email() }))
-    .mutation(async ({ input, ctx }) => {
-      // Check if this is the dev bypass email
-      if (AuthService.isDevBypassEmail(input.email)) {
-        const result = await AuthService.devLogin(
-          input.email,
-          ctx.req.ip,
-          ctx.req.userAgent
-        );
+  // Login with email and password
+  login: publicProcedure.input(loginSchema).mutation(async ({ input, ctx }) => {
+    const result = await AuthService.login(
+      input.email,
+      input.password,
+      ctx.req.ip,
+      ctx.req.userAgent
+    );
 
-        if (result.success && result.sessionToken) {
-          // Set HTTP-only cookie
-          const cookieStore = await cookies();
-          cookieStore.set('session', result.sessionToken, {
-            httpOnly: true,
-            secure: process.env['NODE_ENV'] === 'production',
-            sameSite: 'strict',
-            maxAge: 60 * 60 * 24 * 7, // 7 days
-            path: '/',
-          });
-
-          // Return special response indicating direct login
-          return {
-            success: true,
-            message: 'Logged in directly',
-            directLogin: true,
-            user: result.user,
-          };
-        }
-
-        return { success: false, message: result.message || 'Dev login failed' };
-      }
-
-      // Normal magic link flow
-      const host = ctx.req.headers.get('host') || 'localhost:3000';
-      const protocol = ctx.req.headers.get('x-forwarded-proto') ||
-        (process.env['NODE_ENV'] === 'production' ? 'https' : 'http');
-      const baseUrl = `${protocol}://${host}`;
-
-      const result = await AuthService.sendMagicLink(input.email, baseUrl);
-      return result;
-    }),
-
-  // Verify magic link and create session
-  verifyMagicLink: publicProcedure
-    .input(z.object({ token: z.string().min(1) }))
-    .mutation(async ({ input, ctx }) => {
-      const result = await AuthService.verifyMagicLink(
-        input.token,
-        ctx.req.ip,
-        ctx.req.userAgent
-      );
-
-      if (!result.success || !result.sessionToken) {
-        throw new TRPCError({
-          code: 'UNAUTHORIZED',
-          message: result.message || 'Invalid or expired link',
-        });
-      }
-
-      // Set HTTP-only cookie
-      const cookieStore = await cookies();
-      cookieStore.set('session', result.sessionToken, {
-        httpOnly: true,
-        secure: process.env['NODE_ENV'] === 'production',
-        sameSite: 'strict',
-        maxAge: 60 * 60 * 24 * 7, // 7 days
-        path: '/',
+    if (!result.success || !result.sessionToken) {
+      throw new TRPCError({
+        code: 'UNAUTHORIZED',
+        message: result.message || 'Invalid credentials',
       });
+    }
 
-      // Log login
-      if (result.user) {
-        await AuditService.logLogin(result.user._id.toString(), {
-          route: 'auth.verifyMagicLink',
-          success: true,
-          duration: 0,
-          ipAddress: ctx.req.ip,
-          userAgent: ctx.req.userAgent,
-        });
-      }
+    // Set HTTP-only cookie
+    const cookieStore = await cookies();
+    cookieStore.set('session', result.sessionToken, {
+      httpOnly: true,
+      secure: process.env['NODE_ENV'] === 'production',
+      sameSite: 'strict',
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+      path: '/',
+    });
 
-      return {
+    // Log login
+    if (result.user) {
+      await AuditService.logLogin(result.user._id.toString(), {
+        route: 'auth.login',
         success: true,
-        user: result.user,
-      };
-    }),
+        duration: 0,
+        ipAddress: ctx.req.ip,
+        userAgent: ctx.req.userAgent,
+      });
+    }
+
+    return {
+      success: true,
+      user: result.user,
+    };
+  }),
+
+  // Change password (for logged in users)
+  changePassword: protectedProcedure.input(changePasswordSchema).mutation(async ({ input, ctx }) => {
+    const result = await AuthService.changePassword(
+      ctx.session.userId,
+      input.currentPassword,
+      input.newPassword
+    );
+
+    if (!result.success) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: result.message || 'Failed to change password',
+      });
+    }
+
+    return { success: true };
+  }),
 
   // Get current session
   getSession: publicProcedure.query(async ({ ctx }) => {
@@ -100,7 +82,7 @@ export const authRouter = router({
       return null;
     }
 
-    const user = await User.findById(ctx.session.userId).select('-__v');
+    const user = await User.findById(ctx.session.userId).select('-__v -passwordHash');
     return user ? user.toObject() : null;
   }),
 
