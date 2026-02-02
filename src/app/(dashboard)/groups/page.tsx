@@ -85,7 +85,9 @@ export default function GroupsPage() {
   const [editGroupOpen, setEditGroupOpen] = useState(false);
   const [editGroup, setEditGroup] = useState<EditGroupState | null>(null);
 
-  const { data, isLoading, refetch } = trpc.group.list.useQuery({
+  const utils = trpc.useUtils();
+
+  const { data, isLoading } = trpc.group.list.useQuery({
     page,
     limit: 20,
     search: search || undefined,
@@ -94,10 +96,16 @@ export default function GroupsPage() {
   const { data: stats } = trpc.group.getStats.useQuery();
   const { data: botStatus } = trpc.botAdmin.getStatus.useQuery();
 
+  // Helper to invalidate all group queries
+  const invalidateGroupQueries = () => {
+    utils.group.list.invalidate();
+    utils.group.getStats.invalidate();
+  };
+
   const deleteGroup = trpc.group.delete.useMutation({
     onSuccess: () => {
       toast.success('Group deleted');
-      refetch();
+      invalidateGroupQueries();
     },
     onError: (error) => {
       toast.error(error.message);
@@ -107,7 +115,8 @@ export default function GroupsPage() {
   const discoverGroups = trpc.group.discoverFromBot.useMutation({
     onSuccess: (data) => {
       toast.success(data.message);
-      refetch();
+      // Invalidate after delay to allow job processing
+      setTimeout(() => invalidateGroupQueries(), 2000);
     },
     onError: (error) => {
       toast.error(error.message);
@@ -117,7 +126,8 @@ export default function GroupsPage() {
   const syncAll = trpc.group.syncAll.useMutation({
     onSuccess: (data) => {
       toast.success(data.message);
-      refetch();
+      // Invalidate after delay to allow job processing
+      setTimeout(() => invalidateGroupQueries(), 2000);
     },
     onError: (error) => {
       toast.error(error.message);
@@ -127,7 +137,8 @@ export default function GroupsPage() {
   const syncGroup = trpc.group.syncGroup.useMutation({
     onSuccess: (data) => {
       toast.success(data.message);
-      refetch();
+      // Invalidate after delay to allow job processing
+      setTimeout(() => invalidateGroupQueries(), 2000);
     },
     onError: (error) => {
       toast.error(error.message);
@@ -152,8 +163,8 @@ export default function GroupsPage() {
       toast.success(data.message);
       setAddGroupOpen(false);
       setNewGroupId('');
-      // Refetch after a short delay to allow the queue job to process
-      setTimeout(() => refetch(), 2000);
+      // Invalidate after delay to allow the queue job to process
+      setTimeout(() => invalidateGroupQueries(), 2000);
     },
     onError: (error) => {
       toast.error(error.message);
@@ -165,7 +176,7 @@ export default function GroupsPage() {
       toast.success('Group settings updated');
       setEditGroupOpen(false);
       setEditGroup(null);
-      refetch();
+      invalidateGroupQueries();
     },
     onError: (error) => {
       toast.error(error.message);
