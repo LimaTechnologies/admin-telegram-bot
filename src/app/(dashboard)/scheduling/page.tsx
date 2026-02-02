@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Calendar, Clock, Plus, AlertTriangle } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Dialog,
   DialogContent,
@@ -41,6 +42,26 @@ export default function SchedulingPage() {
   const { data: creatives } = trpc.creative.getActive.useQuery();
   const { data: groups } = trpc.group.getActive.useQuery();
 
+  // Fetch stats (today/week/pending/conflicts)
+  const { data: stats, isLoading: statsLoading } = trpc.scheduledPost.getStats.useQuery();
+
+  // Fetch today's scheduled posts
+  const todayDateRange = useMemo(() => {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000 - 1);
+    return {
+      from: todayStart.toISOString(),
+      to: todayEnd.toISOString(),
+    };
+  }, []);
+
+  const { data: todayPosts, isLoading: postsLoading } = trpc.scheduledPost.list.useQuery({
+    from: todayDateRange.from,
+    to: todayDateRange.to,
+    limit: 50,
+  });
+
   const createScheduledPost = trpc.scheduledPost.create.useMutation({
     onSuccess: () => {
       toast.success('Post scheduled successfully');
@@ -64,13 +85,23 @@ export default function SchedulingPage() {
   const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const hours = Array.from({ length: 24 }, (_, i) => i);
 
-  const scheduledPosts = [
-    { time: '09:00', campaign: 'Summer OF Promo', group: 'Group 1', type: 'onlyfans' },
-    { time: '12:00', campaign: 'Casino Welcome Bonus', group: 'Group 2', type: 'casino' },
-    { time: '15:00', campaign: 'New Model Intro', group: 'Group 1', type: 'onlyfans' },
-    { time: '18:00', campaign: 'Evening Casino', group: 'Both', type: 'casino' },
-    { time: '21:00', campaign: 'Late Night OF', group: 'Group 2', type: 'onlyfans' },
-  ];
+  // Transform API data for display
+  const scheduledPosts = useMemo(() => {
+    if (!todayPosts?.data) return [];
+    return todayPosts.data.map((post) => {
+      const date = new Date(post.scheduledFor);
+      const campaign = post.campaignId as unknown as { name: string; type: string } | null;
+      const group = post.groupId as unknown as { name: string } | null;
+      return {
+        time: date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+        hour: date.getHours(),
+        campaign: campaign?.name || 'Unknown Campaign',
+        group: group?.name || 'Unknown Group',
+        type: campaign?.type || 'onlyfans',
+        status: post.status,
+      };
+    });
+  }, [todayPosts]);
 
   return (
     <div className="space-y-6">
@@ -177,7 +208,11 @@ export default function SchedulingPage() {
             <CardTitle className="text-sm font-medium">Today&apos;s Posts</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">5</div>
+            {statsLoading ? (
+              <Skeleton className="h-8 w-12" />
+            ) : (
+              <div className="text-2xl font-bold">{stats?.today ?? 0}</div>
+            )}
             <p className="text-xs text-muted-foreground">scheduled</p>
           </CardContent>
         </Card>
@@ -186,7 +221,11 @@ export default function SchedulingPage() {
             <CardTitle className="text-sm font-medium">This Week</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">32</div>
+            {statsLoading ? (
+              <Skeleton className="h-8 w-12" />
+            ) : (
+              <div className="text-2xl font-bold">{stats?.week ?? 0}</div>
+            )}
             <p className="text-xs text-muted-foreground">posts planned</p>
           </CardContent>
         </Card>
@@ -195,7 +234,13 @@ export default function SchedulingPage() {
             <CardTitle className="text-sm font-medium">Pending Approval</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-500">3</div>
+            {statsLoading ? (
+              <Skeleton className="h-8 w-12" />
+            ) : (
+              <div className={`text-2xl font-bold ${(stats?.pendingApproval ?? 0) > 0 ? 'text-yellow-500' : ''}`}>
+                {stats?.pendingApproval ?? 0}
+              </div>
+            )}
             <p className="text-xs text-muted-foreground">need review</p>
           </CardContent>
         </Card>
@@ -204,7 +249,13 @@ export default function SchedulingPage() {
             <CardTitle className="text-sm font-medium">Conflicts</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-500">1</div>
+            {statsLoading ? (
+              <Skeleton className="h-8 w-12" />
+            ) : (
+              <div className={`text-2xl font-bold ${(stats?.conflicts ?? 0) > 0 ? 'text-red-500' : ''}`}>
+                {stats?.conflicts ?? 0}
+              </div>
+            )}
             <p className="text-xs text-muted-foreground">to resolve</p>
           </CardContent>
         </Card>
@@ -240,20 +291,31 @@ export default function SchedulingPage() {
               ))}
             </div>
             <div className="space-y-2 max-h-64 overflow-auto">
-              {hours.slice(8, 23).map((hour) => (
-                <div key={hour} className="flex items-center gap-2 p-2 hover:bg-muted/50 rounded">
-                  <span className="text-sm text-muted-foreground w-12">
-                    {hour.toString().padStart(2, '0')}:00
-                  </span>
-                  <div className="flex-1 h-8 bg-muted/30 rounded flex items-center px-2">
-                    {scheduledPosts.find(p => parseInt(p.time) === hour) && (
-                      <Badge variant="outline" className="text-xs">
-                        {scheduledPosts.find(p => parseInt(p.time) === hour)?.campaign}
-                      </Badge>
-                    )}
-                  </div>
+              {postsLoading ? (
+                <div className="space-y-2">
+                  {[...Array(5)].map((_, i) => (
+                    <Skeleton key={i} className="h-10 w-full" />
+                  ))}
                 </div>
-              ))}
+              ) : (
+                hours.slice(8, 23).map((hour) => {
+                  const postsAtHour = scheduledPosts.filter(p => p.hour === hour);
+                  return (
+                    <div key={hour} className="flex items-center gap-2 p-2 hover:bg-muted/50 rounded">
+                      <span className="text-sm text-muted-foreground w-12">
+                        {hour.toString().padStart(2, '0')}:00
+                      </span>
+                      <div className="flex-1 h-8 bg-muted/30 rounded flex items-center px-2 gap-1">
+                        {postsAtHour.map((post, i) => (
+                          <Badge key={i} variant="outline" className="text-xs">
+                            {post.campaign}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </CardContent>
         </Card>
@@ -269,47 +331,61 @@ export default function SchedulingPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {scheduledPosts.map((post, i) => (
-                <div key={i} className="flex items-center gap-3 p-2 rounded bg-muted/30">
-                  <div className="text-sm font-medium text-muted-foreground">
-                    {post.time}
+            {postsLoading ? (
+              <div className="space-y-3">
+                {[...Array(3)].map((_, i) => (
+                  <Skeleton key={i} className="h-14 w-full" />
+                ))}
+              </div>
+            ) : scheduledPosts.length === 0 ? (
+              <div className="text-center text-sm text-muted-foreground py-8">
+                No posts scheduled for today
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {scheduledPosts.map((post, i) => (
+                  <div key={i} className="flex items-center gap-3 p-2 rounded bg-muted/30">
+                    <div className="text-sm font-medium text-muted-foreground">
+                      {post.time}
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm font-medium">{post.campaign}</div>
+                      <div className="text-xs text-muted-foreground">{post.group}</div>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className={
+                        post.type === 'onlyfans'
+                          ? 'bg-pink-500/10 text-pink-500 border-pink-500/20'
+                          : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'
+                      }
+                    >
+                      {post.type === 'onlyfans' ? 'OF' : 'Casino'}
+                    </Badge>
                   </div>
-                  <div className="flex-1">
-                    <div className="text-sm font-medium">{post.campaign}</div>
-                    <div className="text-xs text-muted-foreground">{post.group}</div>
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className={
-                      post.type === 'onlyfans'
-                        ? 'bg-pink-500/10 text-pink-500 border-pink-500/20'
-                        : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'
-                    }
-                  >
-                    {post.type === 'onlyfans' ? 'OF' : 'Casino'}
-                  </Badge>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      <Card className="bg-yellow-500/10 border-yellow-500/20">
-        <CardContent className="flex items-center gap-4 p-4">
-          <AlertTriangle className="h-5 w-5 text-yellow-500" />
-          <div>
-            <div className="font-medium">Schedule Conflict Detected</div>
-            <div className="text-sm text-muted-foreground">
-              Two posts scheduled within 30 minutes at 15:00. Consider adjusting the timing.
+      {(stats?.conflicts ?? 0) > 0 && (
+        <Card className="bg-yellow-500/10 border-yellow-500/20">
+          <CardContent className="flex items-center gap-4 p-4">
+            <AlertTriangle className="h-5 w-5 text-yellow-500" />
+            <div>
+              <div className="font-medium">Schedule Conflicts Detected</div>
+              <div className="text-sm text-muted-foreground">
+                {stats?.conflicts} post(s) have scheduling conflicts. Consider adjusting the timing.
+              </div>
             </div>
-          </div>
-          <Button variant="outline" size="sm" className="ml-auto">
-            Resolve
-          </Button>
-        </CardContent>
-      </Card>
+            <Button variant="outline" size="sm" className="ml-auto">
+              Resolve
+            </Button>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

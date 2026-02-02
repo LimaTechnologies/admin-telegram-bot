@@ -95,20 +95,62 @@ function mapChatType(type: string): GroupType {
 }
 
 /**
+ * Normalize a Telegram chat ID by adding -100 prefix if needed for supergroups/channels.
+ * Telegram supergroups and channels have IDs that start with -100.
+ */
+function normalizeTelegramId(chatId: string | number): string {
+  const idStr = chatId.toString();
+
+  // If it's already negative and starts with -100, return as is
+  if (idStr.startsWith('-100')) {
+    return idStr;
+  }
+
+  // If it's negative but doesn't start with -100, it might be missing the prefix
+  if (idStr.startsWith('-') && !idStr.startsWith('-100')) {
+    // Remove the leading minus and add -100 prefix
+    return `-100${idStr.slice(1)}`;
+  }
+
+  // If it's positive, it might be a channel/supergroup ID without the sign
+  if (!idStr.startsWith('-') && idStr.length > 10) {
+    return `-100${idStr}`;
+  }
+
+  // Return as is for regular groups (positive smaller IDs)
+  return idStr;
+}
+
+/**
  * Sync a group's information to the database
  */
 export async function syncGroupToDatabase(chatId: string | number): Promise<GroupSyncResult> {
-  const telegramId = chatId.toString();
+  let telegramId = chatId.toString();
 
   try {
-    const chat = await getChatDetails(chatId);
+    // First try with original ID
+    let chat = await getChatDetails(chatId);
+
+    // If not found and ID doesn't have -100 prefix, try with normalized ID
+    if (!chat && !telegramId.startsWith('-100')) {
+      const normalizedId = normalizeTelegramId(chatId);
+      if (normalizedId !== telegramId) {
+        logger.info('Retrying with normalized Telegram ID', { original: telegramId, normalized: normalizedId });
+        chat = await getChatDetails(normalizedId);
+        if (chat) {
+          // Use the normalized ID
+          telegramId = normalizedId;
+        }
+      }
+    }
+
     if (!chat) {
       return {
         groupId: '',
         telegramId,
         name: 'Unknown',
         success: false,
-        error: 'Could not get chat details or chat is private',
+        error: 'Could not get chat details or chat is private. Make sure the bot is a member of the group and the ID is correct (supergroups/channels need -100 prefix).',
         isNew: false,
       };
     }

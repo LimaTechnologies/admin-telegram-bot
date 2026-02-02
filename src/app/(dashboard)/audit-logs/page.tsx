@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Select,
   SelectContent,
@@ -36,6 +37,8 @@ export default function AuditLogsPage() {
     action: actionFilter === 'all' ? undefined : actionFilter,
     entityType: entityFilter === 'all' ? undefined : entityFilter,
   });
+
+  const { data: stats, isLoading: statsLoading } = trpc.audit.getStats.useQuery();
 
   const getActionColor = (action: string) => {
     if (action.includes('create')) return 'bg-green-500/10 text-green-500 border-green-500/20';
@@ -203,7 +206,11 @@ export default function AuditLogsPage() {
             <ScrollText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data?.total || 0}</div>
+            {isLoading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-2xl font-bold">{data?.total ?? 0}</div>
+            )}
             <p className="text-xs text-muted-foreground">All time</p>
           </CardContent>
         </Card>
@@ -212,7 +219,11 @@ export default function AuditLogsPage() {
             <CardTitle className="text-sm font-medium">Today</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">47</div>
+            {statsLoading ? (
+              <Skeleton className="h-8 w-12" />
+            ) : (
+              <div className="text-2xl font-bold">{stats?.todayEvents ?? 0}</div>
+            )}
             <p className="text-xs text-muted-foreground">Events logged</p>
           </CardContent>
         </Card>
@@ -221,7 +232,11 @@ export default function AuditLogsPage() {
             <CardTitle className="text-sm font-medium">Active Users</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">3</div>
+            {statsLoading ? (
+              <Skeleton className="h-8 w-12" />
+            ) : (
+              <div className="text-2xl font-bold">{stats?.activeUsers ?? 0}</div>
+            )}
             <p className="text-xs text-muted-foreground">Last 24 hours</p>
           </CardContent>
         </Card>
@@ -230,7 +245,13 @@ export default function AuditLogsPage() {
             <CardTitle className="text-sm font-medium">Failed Actions</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-500">2</div>
+            {statsLoading ? (
+              <Skeleton className="h-8 w-12" />
+            ) : (
+              <div className={`text-2xl font-bold ${(stats?.failedActions ?? 0) > 0 ? 'text-red-500' : ''}`}>
+                {stats?.failedActions ?? 0}
+              </div>
+            )}
             <p className="text-xs text-muted-foreground">Last 24 hours</p>
           </CardContent>
         </Card>

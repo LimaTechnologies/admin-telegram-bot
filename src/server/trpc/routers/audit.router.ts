@@ -118,6 +118,35 @@ export const auditRouter = router({
       return summary;
     }),
 
+  // Get stats for dashboard (admin only)
+  getStats: adminProcedure.query(async () => {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
+
+    const [todayEvents, activeUsers, failedActions] = await Promise.all([
+      // Events today
+      AuditLog.countDocuments({
+        'metadata.timestamp': { $gte: todayStart },
+      }),
+      // Distinct users in last 24 hours
+      AuditLog.distinct('userId', {
+        'metadata.timestamp': { $gte: yesterdayStart },
+      }).then((users) => users.length),
+      // Failed actions in last 24 hours
+      AuditLog.countDocuments({
+        'metadata.timestamp': { $gte: yesterdayStart },
+        'metadata.success': false,
+      }),
+    ]);
+
+    return {
+      todayEvents,
+      activeUsers,
+      failedActions,
+    };
+  }),
+
   // Get user activity (admin only)
   getUserActivity: adminProcedure
     .input(

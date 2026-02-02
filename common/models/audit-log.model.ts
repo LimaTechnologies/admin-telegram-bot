@@ -1,9 +1,8 @@
 import { Schema, model, models, type Document, type Model, type Types } from 'mongoose';
 import type { IAuditLog, AuditChanges, AuditMetadata } from '$types/audit-log';
 
-export interface AuditLogDocument extends Omit<IAuditLog, '_id' | 'userId' | 'entityId'>, Document {
+export interface AuditLogDocument extends Omit<IAuditLog, '_id' | 'userId'>, Document {
   userId: Types.ObjectId;
-  entityId?: Types.ObjectId;
 }
 
 const auditChangesSchema = new Schema<AuditChanges>(
@@ -68,7 +67,7 @@ const auditLogSchema = new Schema<AuditLogDocument>(
       index: true,
     },
     entityId: {
-      type: Schema.Types.ObjectId,
+      type: String, // Can be MongoDB ObjectId string or Telegram ID
       index: true,
     },
     changes: {

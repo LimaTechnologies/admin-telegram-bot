@@ -93,7 +93,7 @@ export interface IAuditLog extends Timestamps {
   userId: ObjectId;
   action: AuditAction;
   entityType: EntityType;
-  entityId?: ObjectId;
+  entityId?: string; // Can be MongoDB ObjectId string or Telegram ID
   changes: AuditChanges;
   metadata: AuditMetadata;
 }
