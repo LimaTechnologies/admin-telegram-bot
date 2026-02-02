@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** fix/vercel-framework-config
+**Branch:** fix/dashboard-route-conflict
 **Date:** 2026-02-02
-**Summary:** Fixed Vercel deployment 404 error. Added `vercel.json` with explicit framework config (nextjs, bun install/build). Vercel was not auto-detecting Next.js, causing all routes to return 404. Also made `output: 'standalone'` conditional (Docker-only). Site now works at https://admin-telegram-bot.vercel.app
+**Summary:** Fixed route conflict. Removed `src/app/page.tsx` that redirected to non-existent `/dashboard`. The `(dashboard)` route group serves content at `/` directly (not `/dashboard/*`). Dashboard accessible at `/`, redirects to `/login` if not authenticated.
 
 ---
 
