@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** chore/disable-preview-deploys
+**Branch:** chore/admin-scripts
 **Date:** 2026-02-02
-**Summary:** Disabled preview deployments on Vercel - only main branch triggers production deployments. Added Husky pre-push hooks for code validation.
+**Summary:** Added delete-admin.ts script for recreating admin users. Fixed Vercel deployment (404 issue), added Husky pre-push hooks, disabled preview deployments.
 
 ---
 
