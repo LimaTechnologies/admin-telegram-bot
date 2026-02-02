@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** chore/test-scripts
+**Branch:** refactor/remove-mocks
 **Date:** 2026-02-02
-**Summary:** Added production login test script, configured Playwright MCP. Fixed Vercel deployment and login redirect issues. Dashboard works at `/`, login redirects correctly.
+**Summary:** Removed all hardcoded mock data from dashboard pages. Fixed audit log entityId to accept string for Telegram IDs. Added -100 prefix fallback for group validation. Pages now fetch real data from API with proper loading states.
 
 ---
 
