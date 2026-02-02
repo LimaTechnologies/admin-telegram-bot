@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** chore/vercel-config
+**Branch:** fix/vercel-framework-config
 **Date:** 2026-02-02
-**Summary:** Fixed Next.js config for Vercel deployment. Removed `output: 'standalone'` when deploying to Vercel (standalone is Docker-only). Added .env*.local to gitignore. Note: Site returns 404/401 due to Vercel Deployment Protection - must disable in Vercel Dashboard → Settings → Deployment Protection.
+**Summary:** Fixed Vercel deployment 404 error. Added `vercel.json` with explicit framework config (nextjs, bun install/build). Vercel was not auto-detecting Next.js, causing all routes to return 404. Also made `output: 'standalone'` conditional (Docker-only). Site now works at https://admin-telegram-bot.vercel.app
 
 ---
 
