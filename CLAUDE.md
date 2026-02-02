@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** chore/git-hooks
+**Branch:** chore/disable-preview-deploys
 **Date:** 2026-02-02
-**Summary:** Added Husky pre-push hook that runs typecheck, lint, and build before allowing push. Added `bun run push` script to push to both remotes (origin + deploy) automatically.
+**Summary:** Disabled preview deployments on Vercel - only main branch triggers production deployments. Added Husky pre-push hooks for code validation.
 
 ---
 
