@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** fix/login-redirect
+**Branch:** chore/test-scripts
 **Date:** 2026-02-02
-**Summary:** Fixed login redirect - was redirecting to non-existent `/dashboard`, now redirects to `/` (root). Dashboard is served at root via `(dashboard)` route group.
+**Summary:** Added production login test script, configured Playwright MCP. Fixed Vercel deployment and login redirect issues. Dashboard works at `/`, login redirects correctly.
 
 ---
 
