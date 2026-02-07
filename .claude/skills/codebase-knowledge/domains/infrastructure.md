@@ -1,9 +1,9 @@
 # Domain: Infrastructure
 
 ## Last Update
-- **Date:** 2026-01-29
-- **Commit:** chore/external-services-config
-- **Summary:** Configured external MongoDB and S3 services, added utility scripts
+- **Date:** 2026-02-07
+- **Commit:** (session changes)
+- **Summary:** Changed dashboard port from 3000 to 3001 in docker-compose.yml for production compatibility
 
 ## Files
 
@@ -44,7 +44,7 @@
 ### Docker Services
 ```yaml
 services:
-  dashboard:  # Next.js on :3000
+  dashboard:  # Next.js on :3001 (changed from 3000)
   bot:        # grammY bot (webhook mode)
   worker:     # BullMQ processors (scalable)
   redis:      # Queue backend on :6379 (local)

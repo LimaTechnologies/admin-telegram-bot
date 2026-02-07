@@ -1,9 +1,9 @@
 # Domain: Authentication
 
 ## Last Update
-- **Date:** 2026-01-30
-- **Commit:** pending
-- **Summary:** Removed APP_URL env var. Magic link URL now derived from request headers (host + x-forwarded-proto)
+- **Date:** 2026-02-07
+- **Commit:** (session changes)
+- **Summary:** Added Next.js middleware for route protection. Fixed session.model.ts duplicate index. Implemented password-based auth alongside magic links. Updated tests for new login UI.
 
 ## Files
 
@@ -13,15 +13,18 @@
 
 ### Models
 - `common/models/user.model.ts` - User schema with roles
-- `common/models/session.model.ts` - Session storage
+- `common/models/session.model.ts` - Session storage with TTL index (FIXED: removed duplicate expiresAt index)
 - `common/models/magic-link.model.ts` - Magic link tokens (15min TTL)
+
+### Middleware
+- `src/middleware.ts` - Next.js route protection middleware (checks session cookie, redirects to login)
 
 ### API
 - `src/server/trpc/routers/auth.router.ts` - Auth procedures (login, verify, logout, getSession)
 - `src/server/trpc/middleware/auth.middleware.ts` - Session validation middleware
 
 ### Pages
-- `src/app/(auth)/login/page.tsx` - Login form (email input)
+- `src/app/(auth)/login/page.tsx` - Login form (email + password input, password toggle)
 - `src/app/(auth)/verify/page.tsx` - Token verification page
 
 ## Connections
@@ -30,6 +33,7 @@
 - **pages** - Login and verify pages consume auth API
 
 ## Recent Commits
+- Session (2026-02-07) - Added middleware for route protection, fixed session index, password-based auth with tests
 - `066c8e5` - feat: add dev bypass authentication for first admin user
 - `c4cf62c` - feat: add all missing dashboard pages
 - Initial auth implementation
@@ -61,6 +65,14 @@
 6. Response includes `directLogin: true`
 7. Frontend redirects to /groups immediately
 
+### Middleware Pattern
+- `src/middleware.ts` intercepts all requests before route handlers
+- Public routes: `/login`, `/verify`, `/api/trpc`
+- Static assets excluded: `/_next`, `/favicon`, files with extensions
+- Session cookie checked on all protected routes
+- Unauthenticated users redirected to `/login?from=[pathname]`
+- Runs on edge (optimized performance)
+
 ### Gotchas
 - verify/page.tsx uses useRef to prevent double verification on StrictMode
 - Session middleware checks cookie on every protected route
@@ -68,3 +80,5 @@
 - DEV_BYPASS_EMAIL in auth.service.ts allows direct login without email service
 - Dev bypass auto-creates admin user if not exists in database
 - Magic link URL is derived from request headers (host + x-forwarded-proto), no APP_URL env needed
+- Session.model.ts uses single TTL index on expiresAt field (MongoDB auto-deletes expired sessions)
+- Login form now has password field with visibility toggle (in addition to magic link option)

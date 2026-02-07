@@ -9,7 +9,8 @@ test.describe('Responsive Design - Mobile', () => {
     // Check elements are visible on mobile
     await expect(page.getByText('Welcome back')).toBeVisible();
     await expect(page.getByRole('textbox', { name: /email/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /send magic link/i })).toBeVisible();
+    await expect(page.locator('input[type="password"]')).toBeVisible();
+    await expect(page.getByRole('button', { name: /sign in/i })).toBeVisible();
 
     // Form should be reasonably sized on mobile (accounting for padding)
     const form = page.locator('form').first();
@@ -17,11 +18,15 @@ test.describe('Responsive Design - Mobile', () => {
     expect(formBox?.width).toBeGreaterThan(250);
   });
 
-  test('verify page is mobile-friendly', async ({ page }) => {
-    await page.goto('/verify?token=test');
+  test('login card is properly sized on mobile', async ({ page }) => {
+    await page.goto('/login');
 
-    // Check elements are visible
-    await expect(page.getByText('Verifying...')).toBeVisible();
+    // Check card fits mobile viewport
+    const card = page.locator('.max-w-md').first();
+    await expect(card).toBeVisible();
+    const cardBox = await card.boundingBox();
+    expect(cardBox?.width).toBeLessThanOrEqual(375);
+    expect(cardBox?.width).toBeGreaterThan(300);
   });
 });
 

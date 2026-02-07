@@ -43,7 +43,8 @@ test.describe('Authentication Flow', () => {
     await page.goto('/login');
 
     const passwordInput = page.locator('input[placeholder="Enter your password"]');
-    const toggleButton = page.locator('button').filter({ has: page.locator('svg') }).last();
+    // The toggle button is inside the password input's parent div (relative container)
+    const toggleButton = page.locator('input[placeholder="Enter your password"]').locator('..').locator('button');
 
     // Initially password should be hidden
     await expect(passwordInput).toHaveAttribute('type', 'password');
@@ -75,8 +76,9 @@ test.describe('Authentication Flow', () => {
 });
 
 test.describe('Protected Routes', () => {
-  test('dashboard redirects to login when unauthenticated', async ({ page }) => {
-    await page.goto('/dashboard');
+  test('root page redirects to login when unauthenticated', async ({ page }) => {
+    // The (dashboard) route group serves the root /
+    await page.goto('/');
     await expect(page).toHaveURL(/\/login/);
   });
 
@@ -141,10 +143,4 @@ test.describe('Protected Routes', () => {
   });
 });
 
-test.describe('Root Page Redirect', () => {
-  test('root page redirects to dashboard', async ({ page }) => {
-    await page.goto('/');
-    // Should redirect to dashboard, which redirects to login (unauthenticated)
-    await expect(page).toHaveURL(/\/(dashboard|login)/);
-  });
-});
+// Root page redirect is now tested in 'Protected Routes' section

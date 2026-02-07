@@ -22,7 +22,7 @@ const sessionSchema = new Schema<SessionDocument>(
     expiresAt: {
       type: Date,
       required: true,
-      index: true,
+      // Note: TTL index on line 40 already creates an index on this field
     },
     ipAddress: {
       type: String,

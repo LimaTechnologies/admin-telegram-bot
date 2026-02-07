@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** refactor/remove-mocks
-**Date:** 2026-02-02
-**Summary:** Removed all hardcoded mock data from dashboard pages. Fixed audit log entityId to accept string for Telegram IDs. Added -100 prefix fallback for group validation. Pages now fetch real data from API with proper loading states.
+**Branch:** fix/auth-middleware-and-tests
+**Date:** 2026-02-07
+**Summary:** Added Next.js middleware for route protection (redirects unauthenticated users to /login). Fixed duplicate Mongoose index on session.expiresAt. Updated E2E tests for password-based auth. Added dashboard.spec.ts tests.
 
 ---
 
@@ -24,7 +24,7 @@
 - Spam controls and safety measures
 - Audit logging for all actions
 - Queue monitoring for background jobs
-- Magic link authentication
+- Password authentication with middleware protection
 
 ---
 
@@ -39,7 +39,7 @@
 | Database   | MongoDB + Mongoose         |
 | Queue      | BullMQ + Redis             |
 | Bot        | grammY (Telegram)          |
-| Auth       | Magic Link + HTTP-only     |
+| Auth       | Password + HTTP-only cookie |
 | UI         | shadcn/ui + Tailwind v4    |
 | Charts     | Recharts                   |
 | Testing    | Vitest + Playwright        |
