@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** fix/auth-middleware-and-tests
+**Branch:** fix/remove-redundant-middleware
 **Date:** 2026-02-07
-**Summary:** Added Next.js middleware for route protection (redirects unauthenticated users to /login). Fixed duplicate Mongoose index on session.expiresAt. Updated E2E tests for password-based auth. Added dashboard.spec.ts tests.
+**Summary:** Removed redundant Next.js middleware (dashboard layout already handles auth). Fixed duplicate Mongoose index on session.expiresAt. Updated E2E tests for password-based auth.
 
 ---
 
