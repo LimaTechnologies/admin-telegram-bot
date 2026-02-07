@@ -1,7 +1,7 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 // Helper to login before tests
-async function login(page: ReturnType<typeof test.info>['page']) {
+async function login(page: Page) {
   await page.goto('/login');
 
   // Get test credentials from env or use defaults
