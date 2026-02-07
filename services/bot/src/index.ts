@@ -7,6 +7,7 @@ import {
   handleBotRemovedFromGroup,
   handleBotPermissionsChanged,
 } from '@common';
+import { registerPurchaseHandlers } from './handlers/purchase.handler';
 
 async function main() {
   logger.info('Starting bot service...');
@@ -18,11 +19,20 @@ async function main() {
   // Get bot instance (singleton)
   const bot = await getBot();
 
+  // Register purchase handlers (models, buy, history)
+  registerPurchaseHandlers(bot);
+  logger.info('Purchase handlers registered');
+
   // Handle /start command
   bot.command('start', async (ctx) => {
     await ctx.reply(
-      'Welcome to the Ads Bot! This bot is managed by the Admin Dashboard.\n\n' +
-      'Use /status to check the bot status.'
+      '👋 Bem-vindo ao Bot de Modelos!\n\n' +
+      '📱 *Comandos disponíveis:*\n' +
+      '/models - Ver modelos disponíveis\n' +
+      '/history - Ver histórico de compras\n' +
+      '/status - Status do bot\n\n' +
+      'Escolha uma modelo e compre conteúdo exclusivo via PIX!',
+      { parse_mode: 'Markdown' }
     );
   });
 

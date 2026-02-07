@@ -13,6 +13,7 @@ import { auditRouter } from './audit.router';
 import { analyticsRouter } from './analytics.router';
 import { botAdminRouter } from './bot-admin.router';
 import { queueRouter } from './queue.router';
+import { purchaseRouter } from './purchase.router';
 
 export const appRouter = router({
   auth: authRouter,
@@ -29,6 +30,7 @@ export const appRouter = router({
   analytics: analyticsRouter,
   botAdmin: botAdminRouter,
   queue: queueRouter,
+  purchase: purchaseRouter,
 });
 
 export type AppRouter = typeof appRouter;

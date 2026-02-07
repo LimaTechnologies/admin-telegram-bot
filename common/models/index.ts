@@ -10,3 +10,7 @@ export { Casino, type CasinoDocument } from './casino.model';
 export { Deal, type DealDocument } from './deal.model';
 export { Settings, type SettingsDocument, getSettings } from './settings.model';
 export { AuditLog, type AuditLogDocument } from './audit-log.model';
+// Purchase system
+export { PurchaseModel } from './purchase.model';
+export { TransactionModel } from './transaction.model';
+export { TelegramUserModel } from './telegram-user.model';

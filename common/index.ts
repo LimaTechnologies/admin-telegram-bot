@@ -21,6 +21,7 @@ export {
 export { AuthService } from './services/auth.service';
 export { AuditService } from './services/audit.service';
 export { StorageService } from './services/storage.service';
+export { ArkamaService } from './services/arkama.service';
 export {
   getBot,
   getBotApi,

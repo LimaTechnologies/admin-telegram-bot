@@ -22,6 +22,7 @@ interface UploadResult {
 
 interface PresignedUrlResult {
   url: string;
+  key: string;
   expiresAt: Date;
 }
 
@@ -95,7 +96,7 @@ class StorageServiceClass {
       const url = await getSignedUrl(client, command, { expiresIn });
       const expiresAt = new Date(Date.now() + expiresIn * 1000);
 
-      return { url, expiresAt };
+      return { url, key, expiresAt };
     } catch (error) {
       logger.error('Failed to get presigned upload URL', error);
       throw error;
@@ -114,7 +115,7 @@ class StorageServiceClass {
       const url = await getSignedUrl(client, command, { expiresIn });
       const expiresAt = new Date(Date.now() + expiresIn * 1000);
 
-      return { url, expiresAt };
+      return { url, key, expiresAt };
     } catch (error) {
       logger.error('Failed to get presigned download URL', error);
       throw error;

@@ -2,13 +2,16 @@ import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure, operatorProcedure } from '../trpc';
 import { withAudit } from '../middleware/audit.middleware';
-import { OFModel } from '@common';
+import { OFModel, StorageService } from '@common';
+import { Types } from 'mongoose';
 
 const createModelSchema = z.object({
   name: z.string().min(1).max(200),
   username: z.string().min(1).max(100),
   onlyfansUrl: z.string().url(),
   profileImageUrl: z.string().url().optional(),
+  previewPhotos: z.array(z.string()).default([]),
+  referralLink: z.string().optional(),
   niche: z.array(z.string()).default([]),
   tier: z.enum(['bronze', 'silver', 'gold', 'platinum']).default('bronze'),
   subscriptionPrice: z.number().positive().optional(),
@@ -20,10 +23,26 @@ const updateModelSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   onlyfansUrl: z.string().url().optional(),
   profileImageUrl: z.string().url().optional(),
+  previewPhotos: z.array(z.string()).optional(),
+  referralLink: z.string().optional(),
   niche: z.array(z.string()).optional(),
   tier: z.enum(['bronze', 'silver', 'gold', 'platinum']).optional(),
   subscriptionPrice: z.number().positive().optional(),
   bio: z.string().max(1000).optional(),
+  isActive: z.boolean().optional(),
+});
+
+// Product schemas
+const productSchema = z.object({
+  name: z.string().min(1).max(200),
+  description: z.string().max(1000).optional(),
+  type: z.enum(['subscription', 'content', 'ppv', 'custom']),
+  price: z.number().min(0),
+  currency: z.enum(['BRL', 'USD']).default('BRL'),
+  previewImages: z.array(z.string()).default([]),
+});
+
+const updateProductSchema = productSchema.partial().extend({
   isActive: z.boolean().optional(),
 });
 
@@ -193,4 +212,212 @@ export const modelRouter = router({
 
     return result;
   }),
+
+  // ===== PHOTO MANAGEMENT =====
+
+  // Get presigned URL for photo upload
+  getUploadUrl: operatorProcedure
+    .input(
+      z.object({
+        fileName: z.string(),
+        mimeType: z.string(),
+        folder: z.enum(['models', 'products']).default('models'),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const result = await StorageService.getPresignedUploadUrl(
+        input.fileName,
+        input.mimeType,
+        input.folder
+      );
+      return result;
+    }),
+
+  // Add photo to model
+  addPhoto: operatorProcedure
+    .input(
+      z.object({
+        modelId: z.string(),
+        s3Key: z.string(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const model = await OFModel.findByIdAndUpdate(
+        input.modelId,
+        { $push: { previewPhotos: input.s3Key } },
+        { new: true }
+      );
+      if (!model) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Model not found' });
+      }
+      return model.toObject();
+    }),
+
+  // Remove photo from model
+  removePhoto: operatorProcedure
+    .input(
+      z.object({
+        modelId: z.string(),
+        s3Key: z.string(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      // Remove from S3
+      await StorageService.deleteFile(input.s3Key);
+
+      // Remove from model
+      const model = await OFModel.findByIdAndUpdate(
+        input.modelId,
+        { $pull: { previewPhotos: input.s3Key } },
+        { new: true }
+      );
+      if (!model) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Model not found' });
+      }
+      return model.toObject();
+    }),
+
+  // ===== PRODUCT MANAGEMENT =====
+
+  // Add product to model
+  addProduct: operatorProcedure
+    .input(
+      z.object({
+        modelId: z.string(),
+        product: productSchema,
+      })
+    )
+    .use(
+      withAudit({
+        action: 'model.addProduct',
+        entityType: 'model',
+        getEntityId: (input) => (input as { modelId: string }).modelId,
+      })
+    )
+    .mutation(async ({ input }) => {
+      const product = {
+        _id: new Types.ObjectId(),
+        ...input.product,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const model = await OFModel.findByIdAndUpdate(
+        input.modelId,
+        { $push: { products: product } },
+        { new: true }
+      );
+      if (!model) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Model not found' });
+      }
+      return model.toObject();
+    }),
+
+  // Update product
+  updateProduct: operatorProcedure
+    .input(
+      z.object({
+        modelId: z.string(),
+        productId: z.string(),
+        data: updateProductSchema,
+      })
+    )
+    .use(
+      withAudit({
+        action: 'model.updateProduct',
+        entityType: 'model',
+        getEntityId: (input) => (input as { modelId: string }).modelId,
+      })
+    )
+    .mutation(async ({ input }) => {
+      const updateFields: Record<string, unknown> = {};
+      Object.entries(input.data).forEach(([key, value]) => {
+        if (value !== undefined) {
+          updateFields[`products.$.${key}`] = value;
+        }
+      });
+      updateFields['products.$.updatedAt'] = new Date();
+
+      const model = await OFModel.findOneAndUpdate(
+        { _id: input.modelId, 'products._id': input.productId },
+        { $set: updateFields },
+        { new: true }
+      );
+      if (!model) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Model or product not found' });
+      }
+      return model.toObject();
+    }),
+
+  // Delete product
+  deleteProduct: operatorProcedure
+    .input(
+      z.object({
+        modelId: z.string(),
+        productId: z.string(),
+      })
+    )
+    .use(
+      withAudit({
+        action: 'model.deleteProduct',
+        entityType: 'model',
+        getEntityId: (input) => (input as { modelId: string }).modelId,
+      })
+    )
+    .mutation(async ({ input }) => {
+      const model = await OFModel.findByIdAndUpdate(
+        input.modelId,
+        { $pull: { products: { _id: input.productId } } },
+        { new: true }
+      );
+      if (!model) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Model not found' });
+      }
+      return model.toObject();
+    }),
+
+  // ===== PUBLIC ENDPOINTS (for bot) =====
+
+  // Get models for public display (bot)
+  getPublicModels: protectedProcedure.query(async () => {
+    const models = await OFModel.find({
+      isActive: true,
+      'products.0': { $exists: true }, // Has at least one product
+    })
+      .sort({ tier: -1, 'performance.conversionRate': -1 })
+      .select('_id name username bio tier previewPhotos products referralLink');
+
+    return models.map((m) => {
+      const obj = m.toObject();
+      // Add public URLs for preview photos
+      obj.previewPhotos = obj.previewPhotos.map((key: string) =>
+        StorageService.getPublicUrl(key)
+      );
+      // Filter only active products
+      obj.products = obj.products.filter((p: { isActive: boolean }) => p.isActive);
+      return obj;
+    });
+  }),
+
+  // Get single model for public (bot)
+  getPublicById: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ input }) => {
+      const model = await OFModel.findOne({
+        _id: input.id,
+        isActive: true,
+      }).select('_id name username bio tier previewPhotos products referralLink onlyfansUrl');
+
+      if (!model) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Model not found' });
+      }
+
+      const obj = model.toObject();
+      obj.previewPhotos = obj.previewPhotos.map((key: string) =>
+        StorageService.getPublicUrl(key)
+      );
+      obj.products = obj.products.filter((p: { isActive: boolean }) => p.isActive);
+      return obj;
+    }),
 });

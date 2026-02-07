@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Heart, Plus, MoreVertical, Search, TrendingUp } from 'lucide-react';
+import { Heart, Plus, MoreVertical, Search, TrendingUp, Package, Image as ImageIcon } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import { DataTable } from '@/components/shared/data-table';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
@@ -34,12 +35,15 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
+import { ModelDetailDialog } from './_components/model-detail-dialog';
 
 export default function ModelsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [tierFilter, setTierFilter] = useState<'bronze' | 'silver' | 'gold' | 'platinum' | 'all'>('all');
   const [createOpen, setCreateOpen] = useState(false);
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     username: '',
@@ -143,6 +147,22 @@ export default function ModelsPage() {
       ),
     },
     {
+      key: 'content',
+      header: 'Content',
+      cell: (row) => (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex items-center gap-1">
+            <ImageIcon className="h-3 w-3" />
+            {row.previewPhotos?.length || 0}
+          </div>
+          <div className="flex items-center gap-1">
+            <Package className="h-3 w-3" />
+            {row.products?.length || 0}
+          </div>
+        </div>
+      ),
+    },
+    {
       key: 'performance',
       header: 'Performance',
       cell: (row) => (
@@ -177,8 +197,17 @@ export default function ModelsPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem>View Profile</DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                setSelectedModelId(row._id);
+                setDetailDialogOpen(true);
+              }}
+            >
+              <ImageIcon className="mr-2 h-4 w-4" />
+              Photos & Products
+            </DropdownMenuItem>
             <DropdownMenuItem>View Campaigns</DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-destructive"
               onClick={() => {
@@ -358,6 +387,17 @@ export default function ModelsPage() {
           </Button>
         </div>
       )}
+
+      {/* Model Detail Dialog */}
+      <ModelDetailDialog
+        modelId={selectedModelId}
+        open={detailDialogOpen}
+        onOpenChange={setDetailDialogOpen}
+        onSuccess={() => {
+          refetch();
+          setDetailDialogOpen(false);
+        }}
+      />
     </div>
   );
 }

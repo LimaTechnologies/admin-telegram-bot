@@ -1,5 +1,5 @@
 import { Schema, model, models, type Document, type Model } from 'mongoose';
-import type { IModel, ModelPerformance } from '$types/model';
+import type { IModel, ModelPerformance, ModelProduct } from '$types/model';
 
 export interface ModelDocument extends Omit<IModel, '_id'>, Document {}
 
@@ -33,6 +33,47 @@ const modelPerformanceSchema = new Schema<ModelPerformance>(
   { _id: false }
 );
 
+// Product schema for items the model sells
+const modelProductSchema = new Schema<ModelProduct>(
+  {
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    description: {
+      type: String,
+      trim: true,
+    },
+    type: {
+      type: String,
+      enum: ['subscription', 'content', 'ppv', 'custom'],
+      required: true,
+    },
+    price: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    currency: {
+      type: String,
+      enum: ['BRL', 'USD'],
+      default: 'BRL',
+    },
+    previewImages: {
+      type: [String],
+      default: [],
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
 const modelSchema = new Schema<ModelDocument>(
   {
     name: {
@@ -52,6 +93,20 @@ const modelSchema = new Schema<ModelDocument>(
       required: true,
     },
     profileImageUrl: {
+      type: String,
+    },
+    // NEW: Multiple preview photos (S3 keys)
+    previewPhotos: {
+      type: [String],
+      default: [],
+    },
+    // NEW: Products for sale
+    products: {
+      type: [modelProductSchema],
+      default: [],
+    },
+    // NEW: Referral link for tracking
+    referralLink: {
       type: String,
     },
     niche: {
