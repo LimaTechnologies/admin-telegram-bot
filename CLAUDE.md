@@ -91,6 +91,180 @@ project-root/
 
 ---
 
+## Dashboard Page Pattern (COPY THIS)
+
+All dashboard pages follow the same structure. Use this as template:
+
+```tsx
+'use client';
+import { useState } from 'react';
+import { trpc } from '@/lib/trpc/client';
+import { DataTable } from '@/components/shared/data-table';
+import { Button, Input, Badge, Dialog, Select } from '@/components/ui/*';
+import { toast } from 'sonner';
+
+export default function EntityPage() {
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [filter, setFilter] = useState<'all' | 'option'>('all');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [formData, setFormData] = useState({ /* fields */ });
+
+  // Queries
+  const { data, isLoading, refetch } = trpc.entity.list.useQuery({
+    page, limit: 20, search: search || undefined,
+    filter: filter === 'all' ? undefined : filter,
+  });
+  const { data: stats } = trpc.entity.getStats.useQuery();
+
+  // Mutations
+  const createEntity = trpc.entity.create.useMutation({
+    onSuccess: () => { toast.success('Created'); setCreateOpen(false); refetch(); },
+    onError: (e) => toast.error(e.message),
+  });
+
+  // Columns definition
+  const columns = [
+    { key: 'name', header: 'Name', cell: (row) => <div>{row.name}</div> },
+    { key: 'actions', header: '', cell: (row) => <DropdownMenu>...</DropdownMenu> },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Header + Create Button */}
+      {/* Stats Cards Grid */}
+      {/* Search + Filters */}
+      <DataTable columns={columns} data={data?.data || []} isLoading={isLoading} />
+      {/* Pagination */}
+    </div>
+  );
+}
+```
+
+---
+
+## tRPC Router Pattern (COPY THIS)
+
+```typescript
+// src/server/trpc/routers/entity.router.ts
+export const entityRouter = router({
+  list: protectedProcedure
+    .input(z.object({ page: z.number(), limit: z.number(), search: z.string().optional() }))
+    .query(async ({ input }) => {
+      const query = input.search ? { name: { $regex: input.search, $options: 'i' } } : {};
+      const [data, total] = await Promise.all([
+        EntityModel.find(query).skip((input.page - 1) * input.limit).limit(input.limit),
+        EntityModel.countDocuments(query),
+      ]);
+      return { data, total, totalPages: Math.ceil(total / input.limit) };
+    }),
+
+  getById: protectedProcedure.input(z.object({ id: z.string() })).query(/* ... */),
+  getStats: protectedProcedure.query(/* aggregation pipeline */),
+
+  create: operatorProcedure.use(withAudit('entity', 'create')).input(CreateSchema).mutation(/* ... */),
+  update: operatorProcedure.use(withAudit('entity', 'update')).input(UpdateSchema).mutation(/* ... */),
+  delete: operatorProcedure.use(withAudit('entity', 'delete')).input(z.object({ id: z.string() })).mutation(/* ... */),
+});
+```
+
+---
+
+## Mongoose Model Pattern (COPY THIS)
+
+```typescript
+// common/models/entity.model.ts
+const entitySchema = new Schema<IEntity>({
+  name: { type: String, required: true, trim: true },
+  status: { type: String, enum: ['active', 'inactive'], default: 'active' },
+  performance: {
+    totalViews: { type: Number, default: 0 },
+    totalRevenue: { type: Number, default: 0 },
+  },
+}, { timestamps: true });
+
+entitySchema.index({ name: 1 });
+entitySchema.index({ status: 1 });
+
+export const EntityModel = model<IEntity>('Entity', entitySchema);
+```
+
+---
+
+## Current Database Models (14 total)
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| User | Dashboard auth | email, passwordHash, role (admin/operator/viewer) |
+| Session | Auth sessions | userId, tokenHash, expiresAt |
+| OFModel | OnlyFans models | name, username, onlyfansUrl, tier, performance |
+| Casino | Casino brands | name, websiteUrl, geoTargeting, riskLevel |
+| Campaign | Ad campaigns | type (onlyfans/casino), status, schedule, targeting |
+| Creative | Ad creatives | media (type, s3Key), caption, ctaStyle |
+| Deal | Revenue deals | modelId/casinoId, terms, performance |
+| TelegramGroup | Synced groups | telegramId, botPermissions, stats |
+| ScheduledPost | Scheduled posts | campaignId, scheduledFor, status |
+| PostHistory | Posted messages | campaignId, messageId, performance |
+| Settings | Bot config | key, value (spam controls, notifications) |
+| AuditLog | Activity logs | userId, action, entityType, changes |
+
+---
+
+## Storage Service (S3/MinIO)
+
+```typescript
+// common/services/storage.service.ts - Already implemented
+import { StorageService } from '@common';
+
+// Get presigned URL for browser upload
+const { uploadUrl, s3Key } = await StorageService.getPresignedUploadUrl(
+  'photo.jpg', 'image/jpeg', 'creatives'
+);
+
+// Get public URL for display
+const publicUrl = StorageService.getPublicUrl(s3Key);
+
+// Delete file
+await StorageService.deleteFile(s3Key);
+```
+
+---
+
+## Bot Architecture (grammY)
+
+```
+services/bot/src/
+├── index.ts              # Entry point, command handlers
+└── (handlers)            # Future: conversation handlers
+
+Current commands:
+- /start - Welcome message
+- /status - Bot status check
+
+Services used:
+- TelegramService (common/) - Bot singleton, API access
+- GroupDiscoveryService - Sync groups to DB
+- PosterService - Send messages to groups
+```
+
+---
+
+## Missing for Model Purchases
+
+| Feature | Status | What's Needed |
+|---------|--------|---------------|
+| Multiple preview photos | ❌ | Array field in OFModel, gallery UI |
+| Photo upload | ❌ | Presigned URL endpoint in model router |
+| Model products/pricing | ❌ | Products array with price, type |
+| Purchase model | ❌ | New Mongoose model |
+| Transaction model | ❌ | PIX/payment tracking |
+| Bot purchase flow | ❌ | grammY conversation handlers |
+| Inline keyboards | ❌ | Reply markup for model selection |
+| Payment mock (Arkama) | ❌ | Service to generate PIX, fake confirmation |
+| User purchase history | ❌ | Query endpoint, bot /history command |
+
+---
+
 ## Workflow (STRICT FLOW)
 
 ```
