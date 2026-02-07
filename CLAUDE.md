@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** fix/remove-redundant-middleware
+**Branch:** main
 **Date:** 2026-02-07
-**Summary:** Removed redundant Next.js middleware (dashboard layout already handles auth). Fixed duplicate Mongoose index on session.expiresAt. Updated E2E tests for password-based auth.
+**Summary:** Documented frontend patterns, tRPC router structure, and database models. Added comprehensive reference for dashboard page implementation.
 
 ---
 
