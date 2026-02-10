@@ -12,6 +12,9 @@
 - `src/server/trpc/routers/index.ts` - Router aggregation
 - `src/app/api/trpc/[trpc]/route.ts` - Next.js API handler
 
+### Webhooks (Non-tRPC)
+- `src/app/api/webhooks/arkama/route.ts` - Arkama payment webhook (HMAC-SHA256 signature validation, auto content delivery)
+
 ### Routers (14 total)
 - `auth.router.ts` - Authentication (login, verify, logout, getSession)
 - `user.router.ts` - User CRUD (admin only)
@@ -40,6 +43,7 @@
 - **pages** - All dashboard pages consume tRPC queries/mutations
 
 ## Recent Commits
+- 72dd834 - docs: document model purchase PIX payment feature (webhook added)
 - `5216399` - feat: implement model purchase system with PIX payments
 - `3972e6e` - feat: add scheduledPost router + CRUD mutations for campaign/creative/group routers
 - `c4cf62c` - feat: add all missing dashboard pages
@@ -164,6 +168,58 @@ export const groupRouter = t.router({
 
 **Files Modified:**
 - `src/server/trpc/routers/purchase.router.ts`
+
+#### 2026-02-10 - Arkama Webhook Handler
+
+**Problem:** Payment confirmations from Arkama require webhook endpoint, but tRPC not suitable for webhooks (requires auth context).
+
+**Root Cause:** Webhooks need to be publicly accessible with signature validation, not session-based auth.
+
+**Solution:** Created Next.js API route at `/api/webhooks/arkama` with:
+- POST handler for webhook events
+- HMAC-SHA256 signature validation via `X-Arkama-Signature` header
+- Event handling for `payment.confirmed`, `payment.failed`, `payment.expired`
+- Direct MongoDB updates (Purchase + Transaction status)
+- Auto content delivery via TelegramService on payment confirmation
+
+**Implementation:**
+```typescript
+// src/app/api/webhooks/arkama/route.ts
+export async function POST(request: Request) {
+  // 1. Validate signature
+  const signature = headers().get('x-arkama-signature');
+  const body = await request.text();
+  const hmac = crypto.createHmac('sha256', WEBHOOK_SECRET);
+  const expectedSignature = hmac.update(body).digest('hex');
+
+  if (signature !== expectedSignature) {
+    return new Response('Invalid signature', { status: 401 });
+  }
+
+  // 2. Parse event
+  const event = JSON.parse(body);
+
+  // 3. Handle event
+  if (event.type === 'payment.confirmed') {
+    const purchase = await Purchase.findById(purchaseId);
+    purchase.status = 'paid';
+    await purchase.save();
+
+    // Auto-deliver content
+    await deliverContentToUser(purchase);
+  }
+
+  return new Response('OK', { status: 200 });
+}
+```
+
+**Prevention:** Use Next.js API routes (not tRPC) for webhooks that require public access with custom auth (signatures, API keys).
+
+**Files Created:**
+- `src/app/api/webhooks/arkama/route.ts`
+
+**Environment Variables:**
+- `ARKAMA_WEBHOOK_SECRET` - HMAC secret for signature validation
 
 #### 2027-01-27 - Default Values in Mongoose Schemas
 

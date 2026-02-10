@@ -1,9 +1,9 @@
 # Domain: Dashboard Pages
 
 ## Last Update
-- **Date:** 2026-01-28
-- **Commit:** fix/analytics-charts-visibility
-- **Summary:** Fixed analytics charts visibility - vibrant colors, legends, improved tooltips
+- **Date:** 2026-02-10
+- **Commit:** 72dd834
+- **Summary:** Added "Telegram Purchases" report type to reports page for bot purchase analytics
 
 ## Files
 
@@ -23,7 +23,7 @@
 - `src/app/(dashboard)/models/page.tsx` - OnlyFans models (functional Add modal)
 - `src/app/(dashboard)/casinos/page.tsx` - Casino brands (functional Add modal)
 - `src/app/(dashboard)/spam-controls/page.tsx` - Safety settings
-- `src/app/(dashboard)/reports/page.tsx` - Export generation
+- `src/app/(dashboard)/reports/page.tsx` - Export generation (includes Telegram Purchases report)
 - `src/app/(dashboard)/audit-logs/page.tsx` - Activity history
 - `src/app/(dashboard)/queue-monitor/page.tsx` - BullMQ status
 
@@ -37,6 +37,7 @@
 - **authentication** - Dashboard layout checks session
 
 ## Recent Commits
+- 72dd834 - docs: document model purchase PIX payment feature
 - `3972e6e` - feat: add functional CRUD modals to all pages + new campaign creation page
 - `c4cf62c` - feat: add all missing dashboard pages
 - Previous commits for groups, campaigns
@@ -187,3 +188,22 @@ Mongoose schemas have automatic defaults (e.g., `settings: { isActive: true }`),
 - New groups created without explicit `isActive` are automatically active
 - Check schema defaults before assuming need to set explicitly
 - This affects what appears in `getActive` queries immediately after creation
+
+### Reports Page Updates (2026-02-10)
+
+Added "Telegram Purchases" report type to `/reports` page:
+
+**Report Types:**
+1. Campaign Performance
+2. Revenue Summary
+3. Group Analytics
+4. **Telegram Purchases** (NEW) - Bot purchase analytics
+
+**Purpose:** Export bot purchase data for accounting/analytics outside dashboard.
+
+**Data Source:** PurchaseModel with populated user/model/product data.
+
+**Export Format:** CSV with columns: Date, Username, Model, Product, Amount, Status, Transaction ID.
+
+**Files Modified:**
+- `src/app/(dashboard)/reports/page.tsx`

@@ -64,6 +64,11 @@ const modelProductSchema = new Schema<ModelProduct>(
       type: [String],
       default: [],
     },
+    // Actual content delivered after purchase
+    contentPhotos: {
+      type: [String],
+      default: [],
+    },
     isActive: {
       type: Boolean,
       default: true,

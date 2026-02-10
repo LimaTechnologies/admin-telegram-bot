@@ -8,7 +8,7 @@
 
 **Branch:** feature/model-purchase-pix-payment
 **Date:** 2026-02-10
-**Summary:** Implemented PIX payment system with Arkama API for model content purchases via Telegram bot. Added purchase flow with gallery preview, packs/subscription separation, and checkout with payment code generation.
+**Summary:** Complete PIX payment system with Arkama API integration. Bot flow: deep link → gallery preview → packs/subscription → checkout with QR code → content delivery. Added webhook for payment confirmation, contentPhotos field for product content, and purchase reports in dashboard.
 
 ---
 
@@ -262,6 +262,10 @@ Services used:
 | Inline keyboards | ✅ | Ver Packs / Assinar buttons, navigation |
 | Arkama API | ✅ | `ArkamaService` with createPixPayment, checkPaymentStatus |
 | User purchase history | ✅ | `/history` command in bot |
+| Content delivery | ✅ | `contentPhotos` field in products, sent after payment |
+| Arkama webhook | ✅ | `/api/webhooks/arkama` for payment confirmation |
+| QR code display | ✅ | Base64/URL support via `InputFile` |
+| Purchase reports | ✅ | Dashboard reports page with purchase option |
 
 ### Bot Purchase Flow
 
@@ -270,10 +274,18 @@ Deep Link → Model Profile (4 photos) → Ver Packs | Assinar
                                            ↓           ↓
                                       Pack List    Subscription Details
                                            ↓           ↓
-                                      Pack Details → Checkout (PIX code)
+                                      Pack Details → Checkout (QR + code)
                                                          ↓
-                                                   Payment Check → Access Granted
+                               Payment Check → Content Delivered (photos)
 ```
+
+### Key Files
+
+- `services/bot/src/handlers/purchase.handler.ts` - Bot purchase flow
+- `common/services/arkama.service.ts` - PIX payment integration
+- `src/app/api/webhooks/arkama/route.ts` - Payment webhook
+- `src/app/(dashboard)/models/page.tsx` - Model management
+- `docs/SETUP-PURCHASE-SYSTEM.md` - Full setup documentation
 
 ---
 

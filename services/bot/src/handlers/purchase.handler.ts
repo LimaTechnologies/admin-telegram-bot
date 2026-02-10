@@ -1,4 +1,4 @@
-import { Bot, InlineKeyboard, Context } from 'grammy';
+import { Bot, InlineKeyboard, Context, InputFile } from 'grammy';
 import {
   OFModel,
   PurchaseModel,
@@ -21,6 +21,10 @@ function formatPrice(price: number, currency: string): string {
 
 function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function getPhotoUrl(photo: string): string {
+  return photo.startsWith('http') ? photo : StorageService.getPublicUrl(photo);
 }
 
 // ============ MAIN HANDLER ============
@@ -127,7 +131,7 @@ async function showModelsList(ctx: Context) {
   }
 }
 
-// ============ 2. MODEL PROFILE (com galeria) ============
+// ============ 2. MODEL PROFILE (gallery unified with buttons) ============
 
 export async function showModelProfile(ctx: Context, modelId: string) {
   try {
@@ -159,50 +163,55 @@ export async function showModelProfile(ctx: Context, modelId: string) {
 
     keyboard.text('👀 Ver outras modelos', 'back_to_models');
 
-    // Caption
-    const caption = `${tierEmoji} <b>${escapeHtml(model.name)}</b>\n@${escapeHtml(model.username)}\n\n${model.bio ? escapeHtml(model.bio) : ''}`;
+    // Caption with name, bio
+    const caption =
+      `${tierEmoji} <b>${escapeHtml(model.name)}</b>\n` +
+      `@${escapeHtml(model.username)}\n\n` +
+      `${model.bio ? escapeHtml(model.bio) : ''}`;
 
-    // Send gallery if multiple photos
-    if (model.previewPhotos && model.previewPhotos.length > 1) {
-      const mediaGroup = model.previewPhotos.slice(0, 4).map((photo, idx) => {
-        const url = photo.startsWith('http') ? photo : StorageService.getPublicUrl(photo);
-        return {
-          type: 'photo' as const,
-          media: url,
-          caption: idx === 0 ? caption : undefined,
-          parse_mode: idx === 0 ? ('HTML' as const) : undefined,
-        };
-      });
+    const photos = model.previewPhotos || [];
+
+    // Strategy: send N-1 photos as media group, last photo with caption + buttons
+    if (photos.length > 1) {
+      // Send first photos without buttons (media group limitation)
+      const mediaGroup = photos.slice(0, -1).map((photo) => ({
+        type: 'photo' as const,
+        media: getPhotoUrl(photo),
+      }));
 
       try {
         await ctx.replyWithMediaGroup(mediaGroup);
-        await ctx.reply('👆 Gostou? Escolha uma opcao:', { reply_markup: keyboard });
-        return;
       } catch (galleryError) {
         logger.error('Gallery failed', { error: galleryError });
       }
-    }
 
-    // Single photo fallback
-    if (model.previewPhotos && model.previewPhotos.length > 0) {
-      const photoUrl = model.previewPhotos[0].startsWith('http')
-        ? model.previewPhotos[0]
-        : StorageService.getPublicUrl(model.previewPhotos[0]);
-
+      // Last photo with caption and buttons
       try {
-        await ctx.replyWithPhoto(photoUrl, {
+        await ctx.replyWithPhoto(getPhotoUrl(photos[photos.length - 1]), {
           caption,
           parse_mode: 'HTML',
           reply_markup: keyboard,
         });
         return;
       } catch {
-        // continue to text
+        // fallback to text
+      }
+    } else if (photos.length === 1) {
+      // Single photo with caption and buttons
+      try {
+        await ctx.replyWithPhoto(getPhotoUrl(photos[0]), {
+          caption,
+          parse_mode: 'HTML',
+          reply_markup: keyboard,
+        });
+        return;
+      } catch {
+        // fallback to text
       }
     }
 
     // Text fallback
-    await ctx.reply(caption + '\n\nEscolha uma opcao:', {
+    await ctx.reply(caption, {
       parse_mode: 'HTML',
       reply_markup: keyboard,
     });
@@ -265,25 +274,25 @@ async function showPackDetails(ctx: Context, modelId: string, productId: string)
     }
 
     const price = formatPrice(pack.price, pack.currency);
+    const contentCount = pack.contentPhotos?.length || 0;
 
     const keyboard = new InlineKeyboard()
       .text(`🔓 Liberar Acesso • ${price}`, `buy_${modelId}_${productId}`)
       .row()
       .text('⬅️ Voltar aos packs', `packs_${modelId}`);
 
+    const caption =
+      `<b>📦 ${escapeHtml(pack.name)}</b>\n\n` +
+      `${pack.description ? escapeHtml(pack.description) + '\n\n' : ''}` +
+      `${contentCount > 0 ? `📸 <b>${contentCount} fotos exclusivas</b>\n` : ''}` +
+      `💰 <b>${price}</b>\n\n` +
+      `<i>Acesso permanente apos a compra</i>`;
+
     // Send pack preview if available
     if (pack.previewImages && pack.previewImages.length > 0) {
-      const photoUrl = pack.previewImages[0].startsWith('http')
-        ? pack.previewImages[0]
-        : StorageService.getPublicUrl(pack.previewImages[0]);
-
       try {
-        await ctx.replyWithPhoto(photoUrl, {
-          caption:
-            `<b>📦 ${escapeHtml(pack.name)}</b>\n\n` +
-            `${pack.description ? escapeHtml(pack.description) + '\n\n' : ''}` +
-            `💰 <b>${price}</b>\n\n` +
-            `<i>Acesso permanente apos a compra</i>`,
+        await ctx.replyWithPhoto(getPhotoUrl(pack.previewImages[0]), {
+          caption,
           parse_mode: 'HTML',
           reply_markup: keyboard,
         });
@@ -293,13 +302,7 @@ async function showPackDetails(ctx: Context, modelId: string, productId: string)
       }
     }
 
-    await ctx.reply(
-      `<b>📦 ${escapeHtml(pack.name)}</b>\n\n` +
-        `${pack.description ? escapeHtml(pack.description) + '\n\n' : ''}` +
-        `💰 <b>${price}</b>\n\n` +
-        `<i>Acesso permanente apos a compra</i>`,
-      { parse_mode: 'HTML', reply_markup: keyboard }
-    );
+    await ctx.reply(caption, { parse_mode: 'HTML', reply_markup: keyboard });
   } catch (error) {
     logger.error('Error showing pack details', { error, modelId, productId });
     await ctx.reply('Erro ao carregar. Tente novamente.');
@@ -345,7 +348,7 @@ async function showSubscriptionOption(ctx: Context, modelId: string) {
   }
 }
 
-// ============ 6. CHECKOUT ============
+// ============ 6. CHECKOUT (with QR Code image) ============
 
 async function processCheckout(ctx: Context, modelId: string, productId: string) {
   try {
@@ -367,7 +370,7 @@ async function processCheckout(ctx: Context, modelId: string, productId: string)
       return;
     }
 
-    await ctx.reply('⏳ Gerando acesso...');
+    await ctx.reply('⏳ Gerando codigo...');
 
     // Create/update telegram user
     await TelegramUserModel.findOneAndUpdate(
@@ -423,7 +426,7 @@ async function processCheckout(ctx: Context, modelId: string, productId: string)
       transaction.failureReason = pixResponse.error;
       await transaction.save();
 
-      await ctx.reply('❌ Erro ao gerar acesso. Tente novamente.');
+      await ctx.reply('❌ Erro ao gerar codigo. Tente novamente.');
       return;
     }
 
@@ -447,22 +450,51 @@ async function processCheckout(ctx: Context, modelId: string, productId: string)
       .row()
       .text('❌ Cancelar', 'cancel');
 
-    await ctx.reply(
+    const caption =
       `<b>💳 Finalizar Compra</b>\n\n` +
-        `📦 ${escapeHtml(product.name)}\n` +
-        `💰 <b>${price}</b>\n` +
-        `⏰ Expira em ${expiresIn} min\n\n` +
-        `<b>Codigo:</b>\n<code>${pixResponse.data.pixCopyPaste}</code>\n\n` +
-        `👆 Toque no codigo para copiar\nCole no app do seu banco`,
-      { parse_mode: 'HTML', reply_markup: keyboard }
-    );
+      `📦 ${escapeHtml(product.name)}\n` +
+      `💰 <b>${price}</b>\n` +
+      `⏰ Expira em ${expiresIn} min\n\n` +
+      `<b>Codigo Copia e Cola:</b>\n<code>${pixResponse.data.pixCopyPaste}</code>\n\n` +
+      `👆 Toque para copiar e cole no app do banco`;
+
+    // Try to send QR code image
+    if (pixResponse.data.pixQrCode) {
+      try {
+        let photoSource: string | InputFile;
+
+        if (pixResponse.data.pixQrCode.startsWith('data:image')) {
+          // Base64 image - convert to buffer
+          const base64Data = pixResponse.data.pixQrCode.replace(/^data:image\/\w+;base64,/, '');
+          const buffer = Buffer.from(base64Data, 'base64');
+          photoSource = new InputFile(buffer, 'qrcode.png');
+        } else if (pixResponse.data.pixQrCode.startsWith('http')) {
+          // URL
+          photoSource = pixResponse.data.pixQrCode;
+        } else {
+          throw new Error('Invalid QR code format');
+        }
+
+        await ctx.replyWithPhoto(photoSource, {
+          caption,
+          parse_mode: 'HTML',
+          reply_markup: keyboard,
+        });
+        return;
+      } catch (qrError) {
+        logger.error('QR code send failed', { error: qrError });
+      }
+    }
+
+    // Fallback to text only
+    await ctx.reply(caption, { parse_mode: 'HTML', reply_markup: keyboard });
   } catch (error) {
     logger.error('Error processing checkout', { error });
     await ctx.reply('❌ Erro ao processar. Tente novamente.');
   }
 }
 
-// ============ 7. CHECK PAYMENT ============
+// ============ 7. CHECK PAYMENT & DELIVER CONTENT ============
 
 async function checkPaymentStatus(ctx: Context, purchaseId: string) {
   try {
@@ -498,18 +530,8 @@ async function checkPaymentStatus(ctx: Context, purchaseId: string) {
           { $inc: { totalPurchases: 1, totalSpent: purchase.amount } }
         );
 
-        const model = await OFModel.findById(purchase.modelId);
-
-        const keyboard = new InlineKeyboard()
-          .text('🔥 Ver mais conteudo', 'back_to_models');
-
-        await ctx.reply(
-          `🎉 <b>Acesso Liberado!</b>\n\n` +
-            `📦 ${escapeHtml(purchase.productSnapshot.name)}\n` +
-            `👤 ${model?.name || 'N/A'}\n\n` +
-            `<i>Seu conteudo sera enviado em instantes</i>`,
-          { parse_mode: 'HTML', reply_markup: keyboard }
-        );
+        // Deliver the content!
+        await deliverContent(ctx, purchase);
         return;
       } else if (status === 'expired') {
         transaction.status = 'expired';
@@ -517,13 +539,12 @@ async function checkPaymentStatus(ctx: Context, purchaseId: string) {
         purchase.status = 'expired';
         await purchase.save();
 
-        const keyboard = new InlineKeyboard()
-          .text('🔄 Tentar novamente', 'back_to_models');
+        const keyboard = new InlineKeyboard().text('🔄 Tentar novamente', 'back_to_models');
 
-        await ctx.reply(
-          '⏰ <b>Tempo esgotado</b>\n\nO codigo expirou. Tente novamente.',
-          { parse_mode: 'HTML', reply_markup: keyboard }
-        );
+        await ctx.reply('⏰ <b>Tempo esgotado</b>\n\nO codigo expirou. Tente novamente.', {
+          parse_mode: 'HTML',
+          reply_markup: keyboard,
+        });
         return;
       }
     }
@@ -544,16 +565,89 @@ async function checkPaymentStatus(ctx: Context, purchaseId: string) {
   }
 }
 
-// ============ 8. CANCEL ============
+// ============ 8. DELIVER CONTENT ============
+
+async function deliverContent(ctx: Context, purchase: InstanceType<typeof PurchaseModel>) {
+  try {
+    const model = await OFModel.findById(purchase.modelId);
+    if (!model) {
+      await ctx.reply('🎉 <b>Acesso Liberado!</b>\n\nErro ao carregar conteudo.', { parse_mode: 'HTML' });
+      return;
+    }
+
+    const product = model.products.find((p) => p._id.toString() === purchase.productId?.toString());
+
+    const keyboard = new InlineKeyboard().text('🔥 Ver mais conteudo', 'back_to_models');
+
+    // Success message
+    await ctx.reply(
+      `🎉 <b>Acesso Liberado!</b>\n\n` +
+        `📦 ${escapeHtml(purchase.productSnapshot.name)}\n` +
+        `👤 ${escapeHtml(model.name)}\n\n` +
+        `<i>Seu conteudo exclusivo esta logo abaixo:</i>`,
+      { parse_mode: 'HTML' }
+    );
+
+    // Deliver content photos
+    const photos = product?.contentPhotos || [];
+
+    if (photos.length > 0) {
+      // Send in batches of 10 (Telegram limit for media groups)
+      for (let i = 0; i < photos.length; i += 10) {
+        const batch = photos.slice(i, i + 10);
+
+        if (batch.length === 1) {
+          // Single photo
+          try {
+            await ctx.replyWithPhoto(getPhotoUrl(batch[0]));
+          } catch {
+            await ctx.reply(`📸 ${getPhotoUrl(batch[0])}`);
+          }
+        } else {
+          // Media group
+          const mediaGroup = batch.map((photo) => ({
+            type: 'photo' as const,
+            media: getPhotoUrl(photo),
+          }));
+
+          try {
+            await ctx.replyWithMediaGroup(mediaGroup);
+          } catch (mediaError) {
+            logger.error('Media group failed, sending individually', { error: mediaError });
+            for (const photo of batch) {
+              try {
+                await ctx.replyWithPhoto(getPhotoUrl(photo));
+              } catch {
+                await ctx.reply(`📸 ${getPhotoUrl(photo)}`);
+              }
+            }
+          }
+        }
+      }
+
+      await ctx.reply(`✅ <b>${photos.length} fotos enviadas!</b>\n\nAproveite seu conteudo exclusivo.`, {
+        parse_mode: 'HTML',
+        reply_markup: keyboard,
+      });
+    } else {
+      // No content photos - just show success
+      await ctx.reply(`✅ Compra confirmada!\n\nO conteudo sera enviado em breve.`, { reply_markup: keyboard });
+    }
+  } catch (error) {
+    logger.error('Error delivering content', { error });
+    await ctx.reply('🎉 Acesso liberado! O conteudo sera enviado em breve.');
+  }
+}
+
+// ============ 9. CANCEL ============
 
 async function cancelPurchase(ctx: Context) {
-  const keyboard = new InlineKeyboard()
-    .text('🔥 Ver modelos', 'back_to_models');
+  const keyboard = new InlineKeyboard().text('🔥 Ver modelos', 'back_to_models');
 
   await ctx.reply('❌ Cancelado.\n\nVolte quando quiser!', { reply_markup: keyboard });
 }
 
-// ============ 9. HISTORY ============
+// ============ 10. HISTORY ============
 
 async function showPurchaseHistory(ctx: Context) {
   try {
@@ -571,14 +665,13 @@ async function showPurchaseHistory(ctx: Context) {
       .limit(10)
       .populate('modelId', 'name');
 
-    const keyboard = new InlineKeyboard()
-      .text('🔥 Ver modelos', 'back_to_models');
+    const keyboard = new InlineKeyboard().text('🔥 Ver modelos', 'back_to_models');
 
     if (purchases.length === 0) {
-      await ctx.reply(
-        '<b>📋 Minhas Compras</b>\n\nVoce ainda nao fez nenhuma compra.',
-        { parse_mode: 'HTML', reply_markup: keyboard }
-      );
+      await ctx.reply('<b>📋 Minhas Compras</b>\n\nVoce ainda nao fez nenhuma compra.', {
+        parse_mode: 'HTML',
+        reply_markup: keyboard,
+      });
       return;
     }
 

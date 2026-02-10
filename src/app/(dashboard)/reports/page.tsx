@@ -26,6 +26,7 @@ export default function ReportsPage() {
     { value: 'models', label: 'Model Performance', description: 'OnlyFans model conversion metrics' },
     { value: 'casinos', label: 'Casino Performance', description: 'Casino brand performance metrics' },
     { value: 'creatives', label: 'Creative Analysis', description: 'A/B test results and engagement' },
+    { value: 'purchases', label: 'Telegram Purchases', description: 'Bot purchase history, revenue, user stats' },
   ];
 
   const recentReports = [

@@ -1,9 +1,9 @@
 # Domain: UI Components
 
 ## Last Update
-- **Date:** 2026-01-26
-- **Commit:** ef480b4
-- **Summary:** shadcn/ui components with dark glassmorphism theme
+- **Date:** 2026-02-07
+- **Commit:** 5216399
+- **Summary:** Added photo upload, product manager, and model detail dialog components
 
 ## Files
 
@@ -14,6 +14,11 @@
 ### Shared Components
 - `src/components/shared/data-table.tsx` - Reusable data table
 - `src/components/shared/stats-card.tsx` - KPI display card
+
+### Page-Specific Components
+- `src/app/(dashboard)/models/_components/photo-upload.tsx` - Multi-photo upload with S3 presigned URLs
+- `src/app/(dashboard)/models/_components/product-manager.tsx` - Product CRUD (packs/subscriptions)
+- `src/app/(dashboard)/models/_components/model-detail-dialog.tsx` - Full model details view
 
 ### UI Primitives (shadcn/ui)
 - `src/components/ui/button.tsx`
@@ -40,6 +45,7 @@
 - **api** - Providers wrap tRPC client
 
 ## Recent Commits
+- `5216399` - feat: implement model purchase system with PIX payments
 - `3972e6e` - feat: add functional CRUD modals to all pages + new campaign creation page
 - `c4cf62c` - feat: add slider component for spam controls
 - Previous shadcn component additions
@@ -63,6 +69,41 @@
 **Files Modified:**
 - `src/components/ui/dialog.tsx`
 - Modal implementations in all CRUD pages
+
+### 2026-02-07 - Photo Upload Component with S3 Presigned URLs
+
+**Problem:** Need to allow dashboard users to upload multiple preview photos for models without exposing S3 credentials.
+
+**Root Cause:** Direct S3 upload from browser requires presigned URLs generated server-side.
+
+**Solution:** Created PhotoUpload component that:
+1. Calls tRPC mutation to get presigned URL + s3Key
+2. Uploads file directly to S3 via presigned URL (bypassing backend)
+3. Returns s3Key to parent for saving in model
+4. Displays uploaded photos with delete capability
+
+**Prevention:** For user file uploads, always use presigned URLs pattern. Server generates upload URL, browser uploads directly, server stores only the s3Key.
+
+**Files Modified:**
+- `src/app/(dashboard)/models/_components/photo-upload.tsx`
+- `src/server/trpc/routers/model.router.ts`
+
+### 2026-02-07 - Product Manager Nested CRUD
+
+**Problem:** Each model can have multiple products (packs/subscriptions), requiring nested CRUD within model edit flow.
+
+**Root Cause:** Products are embedded documents in model schema, not separate collection.
+
+**Solution:** Created ProductManager component with:
+- Separate state for products array
+- Add/Edit/Delete handlers that modify local array
+- Parent component receives updated products array via onChange callback
+- Support for pack-specific fields (previewImages) vs subscription fields
+
+**Prevention:** For embedded document arrays, create dedicated manager component that handles CRUD internally and exposes onChange with full array.
+
+**Files Modified:**
+- `src/app/(dashboard)/models/_components/product-manager.tsx`
 
 ## Attention Points
 

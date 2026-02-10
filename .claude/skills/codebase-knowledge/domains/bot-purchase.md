@@ -2,8 +2,8 @@
 
 ## Last Update
 - **Date:** 2026-02-10
-- **Commit:** [latest model purchase feature]
-- **Summary:** Implemented complete PIX payment system for model content purchases via Telegram bot with deep link support, gallery preview, and pack/subscription separation.
+- **Commit:** 72dd834
+- **Summary:** Fixed QR code display (InputFile for base64/URL), unified gallery preview with inline buttons, implemented content delivery after payment, added Arkama webhook handler.
 
 ## Files
 
@@ -17,14 +17,19 @@
 - `common/services/arkama.service.ts` - PIX payment integration with Arkama API and local fallback
 
 ### Seed/Demo
-- `scripts/seed-demo-model.ts` - Demo model creation with 4 preview photos and 3 products (packs + subscription)
+- `scripts/seed-demo-model.ts` - Demo model creation with 4 preview photos and 3 products (packs + subscription with contentPhotos)
+
+### Webhook
+- `src/app/api/webhooks/arkama/route.ts` - Arkama payment webhook handler (signature validation, auto content delivery)
 
 ## Connections
-- **database** - OFModel, PurchaseModel, TransactionModel, TelegramUserModel
+- **database** - OFModel (with contentPhotos), PurchaseModel, TransactionModel, TelegramUserModel
 - **utilities** - ArkamaService for PIX payments
+- **api** - Webhook endpoint for payment confirmations
 - **infrastructure** - Seed scripts, Docker services
 
 ## Recent Commits
+- 72dd834 - docs: document model purchase PIX payment feature
 - 2026-02-10 - feat: implement model purchase system with PIX payments (Arkama integration)
 
 ## Attention Points
@@ -249,9 +254,120 @@ escapeHtml(text: string) -> string;        // Replace &<> with entities
 - [ ] Click "Minhas Compras" -> Shows 1 purchase
 - [ ] Deep link: `/start model_<id>` -> Jumps directly to gallery
 
+### Recent Fixes (2026-02-10)
+
+#### Fix 1: QR Code Display
+**Problem:** `replyWithPhoto()` failed with base64 data URLs and external URLs (Google Charts QR codes).
+
+**Solution:** Use `InputFile` from grammY for both base64 and URL sources:
+```typescript
+import { InputFile } from 'grammy';
+
+// For base64
+await ctx.replyWithPhoto(new InputFile(Buffer.from(base64, 'base64')));
+
+// For URL
+await ctx.replyWithPhoto(new InputFile({ url: qrCodeUrl }));
+```
+
+**Files Modified:**
+- `services/bot/src/handlers/purchase.handler.ts`
+
+#### Fix 2: Unified Gallery with Action Buttons
+**Problem:** Gallery photos sent as media group, then separate last photo with buttons → duplicate photo shown.
+
+**Solution:** Send all but last photo as media group, then send last photo with inline keyboard:
+```typescript
+if (previewPhotos.length > 1) {
+  // Media group for first N-1 photos
+  await ctx.replyWithMediaGroup(previewPhotos.slice(0, -1).map(url => ({ type: 'photo', media: url })));
+}
+// Last photo with buttons
+await ctx.replyWithPhoto(previewPhotos[previewPhotos.length - 1], {
+  caption: message,
+  reply_markup: { inline_keyboard: [...buttons] },
+});
+```
+
+**Files Modified:**
+- `services/bot/src/handlers/purchase.handler.ts`
+
+#### Fix 3: Content Delivery After Payment
+**Problem:** No automatic content delivery after successful payment.
+
+**Solution:** Implement `deliverContent()` function triggered by:
+1. Webhook handler (`/api/webhooks/arkama`) on `payment.confirmed` event
+2. Manual payment check callback handler
+
+**Content Delivery Flow:**
+```
+1. Find Purchase by ID → verify status = 'paid'
+2. Load Model + Product with contentPhotos
+3. Send content in batches (max 10 photos per Telegram limit)
+4. Mark Purchase as 'completed'
+5. Notify user of successful delivery
+```
+
+**Implementation:**
+```typescript
+async function deliverContent(ctx, purchase) {
+  const product = model.products.id(purchase.productId);
+  const photos = product.contentPhotos || [];
+
+  if (photos.length === 0) {
+    // Fallback: send text notice
+    return;
+  }
+
+  // Batch delivery (max 10 per group)
+  const batches = chunkArray(photos, 10);
+  for (const batch of batches) {
+    if (batch.length === 1) {
+      await ctx.api.sendPhoto(userId, batch[0]);
+    } else {
+      await ctx.api.sendMediaGroup(userId, batch.map(url => ({ type: 'photo', media: url })));
+    }
+  }
+
+  purchase.status = 'completed';
+  await purchase.save();
+}
+```
+
+**Files Modified:**
+- `services/bot/src/handlers/purchase.handler.ts`
+
+#### Fix 4: Arkama Webhook Handler
+**Problem:** No webhook endpoint to receive payment confirmations from Arkama.
+
+**Solution:** Created Next.js API route at `/api/webhooks/arkama/route.ts`:
+- Validates HMAC-SHA256 signature from `X-Arkama-Signature` header
+- Handles events: `payment.confirmed`, `payment.failed`, `payment.expired`
+- Updates Purchase and Transaction status
+- Auto-delivers content on payment confirmation
+- Returns 200 OK to acknowledge webhook
+
+**Webhook Signature Validation:**
+```typescript
+const signature = headers().get('x-arkama-signature');
+const body = await request.text();
+const hmac = crypto.createHmac('sha256', WEBHOOK_SECRET);
+const expectedSignature = hmac.update(body).digest('hex');
+
+if (signature !== expectedSignature) {
+  return new Response('Invalid signature', { status: 401 });
+}
+```
+
+**Files Created:**
+- `src/app/api/webhooks/arkama/route.ts`
+
+**Environment Variables:**
+- `ARKAMA_WEBHOOK_SECRET` - Secret for HMAC validation (must match Arkama dashboard config)
+
 ### Known Limitations
 
-1. **Payment Webhook** - Not implemented yet. Status checks are polling-based, not webhook-based.
-2. **Subscription Renewal** - Subscriptions don't auto-renew. Manual handling needed.
-3. **Batch Purchasing** - Can only buy one product per purchase flow. Multiple purchases require multiple flows.
-4. **Refunds** - Not implemented. ArkamaService doesn't have refund support yet.
+1. **Subscription Renewal** - Subscriptions don't auto-renew. Manual handling needed.
+2. **Batch Purchasing** - Can only buy one product per purchase flow. Multiple purchases require multiple flows.
+3. **Refunds** - Not implemented. ArkamaService doesn't have refund support yet.
+4. **Content Batch Size** - Telegram limits media groups to 10 items. Large packs split across multiple messages.

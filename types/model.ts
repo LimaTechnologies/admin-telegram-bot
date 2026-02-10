@@ -20,7 +20,8 @@ export interface ModelProduct {
   type: ProductType;
   price: number;
   currency: 'BRL' | 'USD';
-  previewImages: string[]; // S3 keys
+  previewImages: string[]; // S3 keys - preview before purchase
+  contentPhotos: string[]; // S3 keys - actual content delivered after purchase
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -80,6 +81,7 @@ export interface CreateProductInput {
   price: number;
   currency?: 'BRL' | 'USD';
   previewImages?: string[];
+  contentPhotos?: string[]; // Actual content to deliver after purchase
 }
 
 export interface UpdateProductInput extends Partial<CreateProductInput> {

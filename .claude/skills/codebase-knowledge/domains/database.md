@@ -37,6 +37,7 @@
 - **utilities** - Services use models for business logic
 
 ## Recent Commits
+- 72dd834 - docs: document model purchase PIX payment feature
 - 2026-02-10 - feat: implement model purchase system with PIX payments (Arkama)
 - `c4cf62c` - feat: add all missing dashboard pages
 - Initial model implementation
@@ -114,6 +115,7 @@ products: [{
   price: number;
   currency: 'BRL' | 'USD';
   previewImages?: string[];   // Pack preview images
+  contentPhotos?: string[];   // NEW: Actual content delivered after purchase
   isActive: boolean;
 }];
 ```
@@ -184,8 +186,40 @@ When debugging why entities appear/disappear in `getActive` queries:
 }
 ```
 
+### Product Content Photos (2026-02-10)
+
+**Field:** `contentPhotos?: string[]` in `OFModel.products[]`
+
+**Purpose:** Stores actual content URLs delivered to user AFTER successful payment (separate from previewImages shown before purchase).
+
+**Usage:**
+```typescript
+// In seed script
+product.contentPhotos = [
+  'https://example.com/content/photo1.jpg',
+  'https://example.com/content/photo2.jpg',
+  // ... up to 50+ photos
+];
+
+// In bot delivery
+const product = model.products.id(purchase.productId);
+const photos = product.contentPhotos || [];
+
+// Send in batches (Telegram limit: 10 per media group)
+for (const batch of chunkArray(photos, 10)) {
+  await ctx.api.sendMediaGroup(userId, batch.map(url => ({ type: 'photo', media: url })));
+}
+```
+
+**Key Points:**
+- Optional field (fallback to text message if empty)
+- No limit on array size (Telegram will batch automatically)
+- Uses public URLs (S3, Unsplash, etc.)
+- Delivered only when purchase.status === 'paid'
+
 ### Gotchas
 - MongoDB connection is lazy (connects on first query)
 - Use `@common` alias to import models
 - Settings model is singleton (findOne or create)
 - AuditLog timestamps come from metadata.timestamp, not createdAt
+- Product contentPhotos must be batched (max 10 per Telegram media group)
