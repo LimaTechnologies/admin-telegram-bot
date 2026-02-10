@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** main
-**Date:** 2026-02-07
-**Summary:** Documented frontend patterns, tRPC router structure, and database models. Added comprehensive reference for dashboard page implementation.
+**Branch:** feature/model-purchase-pix-payment
+**Date:** 2026-02-10
+**Summary:** Implemented PIX payment system with Arkama API for model content purchases via Telegram bot. Added purchase flow with gallery preview, packs/subscription separation, and checkout with payment code generation.
 
 ---
 
@@ -25,6 +25,7 @@
 - Audit logging for all actions
 - Queue monitoring for background jobs
 - Password authentication with middleware protection
+- **Model purchases via Telegram bot** with PIX payments (Arkama API)
 
 ---
 
@@ -249,19 +250,30 @@ Services used:
 
 ---
 
-## Missing for Model Purchases
+## Model Purchase System (Implemented)
 
-| Feature | Status | What's Needed |
-|---------|--------|---------------|
-| Multiple preview photos | ❌ | Array field in OFModel, gallery UI |
-| Photo upload | ❌ | Presigned URL endpoint in model router |
-| Model products/pricing | ❌ | Products array with price, type |
-| Purchase model | ❌ | New Mongoose model |
-| Transaction model | ❌ | PIX/payment tracking |
-| Bot purchase flow | ❌ | grammY conversation handlers |
-| Inline keyboards | ❌ | Reply markup for model selection |
-| Payment mock (Arkama) | ❌ | Service to generate PIX, fake confirmation |
-| User purchase history | ❌ | Query endpoint, bot /history command |
+| Feature | Status | Implementation |
+|---------|--------|----------------|
+| Multiple preview photos | ✅ | Gallery with up to 4 photos via `ctx.replyWithMediaGroup()` |
+| Model products/pricing | ✅ | Products array in OFModel (type: content/ppv/subscription) |
+| Purchase model | ✅ | PurchaseModel with productSnapshot, status tracking |
+| Transaction model | ✅ | TransactionModel with PIX fields (key, qrCode, copyPaste) |
+| Bot purchase flow | ✅ | `purchase.handler.ts` with full UX flow |
+| Inline keyboards | ✅ | Ver Packs / Assinar buttons, navigation |
+| Arkama API | ✅ | `ArkamaService` with createPixPayment, checkPaymentStatus |
+| User purchase history | ✅ | `/history` command in bot |
+
+### Bot Purchase Flow
+
+```
+Deep Link → Model Profile (4 photos) → Ver Packs | Assinar
+                                           ↓           ↓
+                                      Pack List    Subscription Details
+                                           ↓           ↓
+                                      Pack Details → Checkout (PIX code)
+                                                         ↓
+                                                   Payment Check → Access Granted
+```
 
 ---
 

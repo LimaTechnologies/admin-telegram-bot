@@ -9,69 +9,90 @@ import {
 } from '@common';
 import { ArkamaService } from '@common/services/arkama.service';
 
-// Store pending purchases in memory (in production, use Redis)
-const pendingPurchases = new Map<
-  number,
-  {
-    modelId: string;
-    productId: string;
-    purchaseId?: string;
-    transactionId?: string;
-    step: 'selecting_product' | 'confirming' | 'awaiting_payment';
-  }
->();
+// ============ HELPERS ============
 
-/**
- * Register purchase-related handlers on the bot
- */
+function getTierEmoji(tier: string): string {
+  return { platinum: '💎', gold: '🥇', silver: '🥈', bronze: '🥉' }[tier] || '⭐';
+}
+
+function formatPrice(price: number, currency: string): string {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(price);
+}
+
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ============ MAIN HANDLER ============
+
 export function registerPurchaseHandlers(bot: Bot) {
-  // /models command - List available models
+  // /models command
   bot.command('models', async (ctx) => {
     await showModelsList(ctx);
   });
 
-  // /buy command - Start purchase flow
-  bot.command('buy', async (ctx) => {
-    await ctx.reply(
-      'Para comprar, use o comando /models para ver as modelos disponíveis e clique em uma para ver os produtos.'
-    );
-  });
-
-  // /history command - Show purchase history
+  // /history command
   bot.command('history', async (ctx) => {
     await showPurchaseHistory(ctx);
   });
 
-  // Handle callback queries (button clicks)
+  // Handle all callback queries
   bot.on('callback_query:data', async (ctx) => {
     const data = ctx.callbackQuery.data;
+    logger.info('Callback received', { data, userId: ctx.from?.id });
 
-    if (data.startsWith('model_')) {
-      const modelId = data.replace('model_', '');
-      await showModelDetails(ctx, modelId);
-    } else if (data.startsWith('product_')) {
-      const [, modelId, productId] = data.split('_');
-      await showProductConfirmation(ctx, modelId, productId);
-    } else if (data.startsWith('confirm_')) {
-      const [, modelId, productId] = data.split('_');
-      await processPayment(ctx, modelId, productId);
-    } else if (data === 'cancel_purchase') {
-      await cancelPurchase(ctx);
-    } else if (data === 'back_to_models') {
-      await showModelsList(ctx);
-    } else if (data.startsWith('check_payment_')) {
-      const purchaseId = data.replace('check_payment_', '');
-      await checkPaymentStatus(ctx, purchaseId);
+    try {
+      // Navigation
+      if (data === 'back_to_models') {
+        await showModelsList(ctx);
+      } else if (data === 'show_history') {
+        await showPurchaseHistory(ctx);
+      }
+      // Model profile
+      else if (data.startsWith('model_')) {
+        const modelId = data.replace('model_', '');
+        await showModelProfile(ctx, modelId);
+      }
+      // View packs menu
+      else if (data.startsWith('packs_')) {
+        const modelId = data.replace('packs_', '');
+        await showPacksMenu(ctx, modelId);
+      }
+      // View subscription option
+      else if (data.startsWith('subscribe_')) {
+        const modelId = data.replace('subscribe_', '');
+        await showSubscriptionOption(ctx, modelId);
+      }
+      // Pack details (before purchase)
+      else if (data.startsWith('pack_')) {
+        const [, modelId, productId] = data.split('_');
+        await showPackDetails(ctx, modelId, productId);
+      }
+      // Confirm purchase (checkout)
+      else if (data.startsWith('buy_')) {
+        const [, modelId, productId] = data.split('_');
+        await processCheckout(ctx, modelId, productId);
+      }
+      // Check payment status
+      else if (data.startsWith('check_')) {
+        const purchaseId = data.replace('check_', '');
+        await checkPaymentStatus(ctx, purchaseId);
+      }
+      // Cancel
+      else if (data === 'cancel') {
+        await cancelPurchase(ctx);
+      }
+
+      await ctx.answerCallbackQuery();
+    } catch (error) {
+      logger.error('Callback error', { error, data });
+      await ctx.answerCallbackQuery({ text: 'Erro, tente novamente' });
     }
-
-    // Answer callback to remove loading state
-    await ctx.answerCallbackQuery();
   });
 }
 
-/**
- * Show list of available models
- */
+// ============ 1. MODELS LIST ============
+
 async function showModelsList(ctx: Context) {
   try {
     const models = await OFModel.find({
@@ -79,186 +100,276 @@ async function showModelsList(ctx: Context) {
       'products.0': { $exists: true },
     })
       .sort({ tier: -1 })
-      .select('_id name username bio tier previewPhotos products')
+      .select('_id name tier products')
       .limit(10);
 
     if (models.length === 0) {
-      await ctx.reply('Nenhuma modelo disponível no momento.');
+      await ctx.reply('Nenhuma modelo disponivel no momento.\n\nVolte mais tarde!');
       return;
     }
 
     const keyboard = new InlineKeyboard();
 
     models.forEach((model) => {
-      const activeProducts = model.products.filter((p) => p.isActive);
       const tierEmoji = getTierEmoji(model.tier);
-      keyboard
-        .text(
-          `${tierEmoji} ${model.name} (${activeProducts.length} produtos)`,
-          `model_${model._id}`
-        )
-        .row();
+      const activeProducts = model.products.filter((p) => p.isActive);
+      const minPrice = Math.min(...activeProducts.map((p) => p.price));
+      keyboard.text(`${tierEmoji} ${model.name} • a partir R$${minPrice.toFixed(0)}`, `model_${model._id}`).row();
     });
 
-    await ctx.reply(
-      '🔥 *Modelos Disponíveis*\n\nEscolha uma modelo para ver os produtos:',
-      {
-        parse_mode: 'Markdown',
-        reply_markup: keyboard,
-      }
-    );
+    await ctx.reply('🔥 <b>Modelos Disponiveis</b>\n\nEscolha uma para ver o conteudo:', {
+      parse_mode: 'HTML',
+      reply_markup: keyboard,
+    });
   } catch (error) {
     logger.error('Error showing models list', { error });
-    await ctx.reply('Erro ao carregar modelos. Tente novamente.');
+    await ctx.reply('Erro ao carregar. Tente novamente.');
   }
 }
 
-/**
- * Show model details with products
- */
-async function showModelDetails(ctx: Context, modelId: string) {
-  try {
-    const model = await OFModel.findById(modelId).select(
-      '_id name username bio tier previewPhotos products onlyfansUrl referralLink'
-    );
+// ============ 2. MODEL PROFILE (com galeria) ============
 
-    if (!model) {
-      await ctx.reply('Modelo não encontrada.');
+export async function showModelProfile(ctx: Context, modelId: string) {
+  try {
+    const model = await OFModel.findById(modelId);
+
+    if (!model || !model.isActive) {
+      await ctx.reply('Modelo nao encontrada.');
       return;
     }
 
-    const activeProducts = model.products.filter((p) => p.isActive);
     const tierEmoji = getTierEmoji(model.tier);
+    const hasPacks = model.products.filter((p) => p.type !== 'subscription' && p.isActive).length > 0;
+    const hasSubscription = model.products.some((p) => p.type === 'subscription' && p.isActive);
 
-    // Build message
-    let message = `${tierEmoji} *${model.name}* (@${model.username})\n\n`;
-    if (model.bio) {
-      message += `${model.bio}\n\n`;
-    }
-    message += `📦 *Produtos Disponíveis:*\n\n`;
-
-    activeProducts.forEach((product, idx) => {
-      const price = formatPrice(product.price, product.currency);
-      message += `${idx + 1}. *${product.name}*\n   💰 ${price}\n`;
-      if (product.description) {
-        message += `   📝 ${product.description.substring(0, 50)}...\n`;
-      }
-      message += '\n';
-    });
-
-    // Build keyboard with products
+    // Build action buttons
     const keyboard = new InlineKeyboard();
-    activeProducts.forEach((product) => {
-      const price = formatPrice(product.price, product.currency);
-      keyboard
-        .text(`💳 ${product.name} - ${price}`, `product_${modelId}_${product._id}`)
-        .row();
-    });
 
-    // Add OnlyFans link if available
+    if (hasPacks) {
+      keyboard.text('📦 Ver Packs', `packs_${modelId}`);
+    }
+    if (hasSubscription) {
+      keyboard.text('⭐ Assinar', `subscribe_${modelId}`);
+    }
+    keyboard.row();
+
     if (model.referralLink || model.onlyfansUrl) {
-      keyboard.url('🔗 Ver OnlyFans', model.referralLink || model.onlyfansUrl).row();
+      keyboard.url('💋 OnlyFans', model.referralLink || model.onlyfansUrl).row();
     }
 
-    keyboard.text('⬅️ Voltar', 'back_to_models');
+    keyboard.text('👀 Ver outras modelos', 'back_to_models');
 
-    // Send photo if available
+    // Caption
+    const caption = `${tierEmoji} <b>${escapeHtml(model.name)}</b>\n@${escapeHtml(model.username)}\n\n${model.bio ? escapeHtml(model.bio) : ''}`;
+
+    // Send gallery if multiple photos
+    if (model.previewPhotos && model.previewPhotos.length > 1) {
+      const mediaGroup = model.previewPhotos.slice(0, 4).map((photo, idx) => {
+        const url = photo.startsWith('http') ? photo : StorageService.getPublicUrl(photo);
+        return {
+          type: 'photo' as const,
+          media: url,
+          caption: idx === 0 ? caption : undefined,
+          parse_mode: idx === 0 ? ('HTML' as const) : undefined,
+        };
+      });
+
+      try {
+        await ctx.replyWithMediaGroup(mediaGroup);
+        await ctx.reply('👆 Gostou? Escolha uma opcao:', { reply_markup: keyboard });
+        return;
+      } catch (galleryError) {
+        logger.error('Gallery failed', { error: galleryError });
+      }
+    }
+
+    // Single photo fallback
     if (model.previewPhotos && model.previewPhotos.length > 0) {
-      const photoUrl = StorageService.getPublicUrl(model.previewPhotos[0]);
+      const photoUrl = model.previewPhotos[0].startsWith('http')
+        ? model.previewPhotos[0]
+        : StorageService.getPublicUrl(model.previewPhotos[0]);
+
       try {
         await ctx.replyWithPhoto(photoUrl, {
-          caption: message,
-          parse_mode: 'Markdown',
+          caption,
+          parse_mode: 'HTML',
           reply_markup: keyboard,
         });
         return;
       } catch {
-        // Fall back to text if photo fails
+        // continue to text
       }
     }
 
-    await ctx.reply(message, {
-      parse_mode: 'Markdown',
+    // Text fallback
+    await ctx.reply(caption + '\n\nEscolha uma opcao:', {
+      parse_mode: 'HTML',
       reply_markup: keyboard,
     });
   } catch (error) {
-    logger.error('Error showing model details', { error, modelId });
-    await ctx.reply('Erro ao carregar modelo. Tente novamente.');
+    logger.error('Error showing model profile', { error, modelId });
+    await ctx.reply('Erro ao carregar. Tente novamente.');
   }
 }
 
-/**
- * Show product confirmation before payment
- */
-async function showProductConfirmation(
-  ctx: Context,
-  modelId: string,
-  productId: string
-) {
+// ============ 3. PACKS MENU ============
+
+async function showPacksMenu(ctx: Context, modelId: string) {
   try {
     const model = await OFModel.findById(modelId);
     if (!model) {
-      await ctx.reply('Modelo não encontrada.');
+      await ctx.reply('Modelo nao encontrada.');
       return;
     }
 
-    const product = model.products.find((p) => p._id.toString() === productId);
-    if (!product) {
-      await ctx.reply('Produto não encontrado.');
+    const packs = model.products.filter((p) => p.type !== 'subscription' && p.isActive);
+
+    if (packs.length === 0) {
+      await ctx.reply('Nenhum pack disponivel no momento.');
       return;
     }
 
-    const price = formatPrice(product.price, product.currency);
+    const keyboard = new InlineKeyboard();
 
-    const message =
-      `🛒 *Confirmar Compra*\n\n` +
-      `*Modelo:* ${model.name}\n` +
-      `*Produto:* ${product.name}\n` +
-      `*Valor:* ${price}\n\n` +
-      `Ao confirmar, você receberá um PIX para pagamento.`;
-
-    const keyboard = new InlineKeyboard()
-      .text('✅ Confirmar e Pagar', `confirm_${modelId}_${productId}`)
-      .row()
-      .text('❌ Cancelar', 'cancel_purchase');
-
-    await ctx.reply(message, {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard,
+    packs.forEach((pack) => {
+      const price = formatPrice(pack.price, pack.currency);
+      keyboard.text(`📦 ${pack.name} • ${price}`, `pack_${modelId}_${pack._id}`).row();
     });
+
+    keyboard.text('⬅️ Voltar', `model_${modelId}`);
+
+    await ctx.reply(
+      `<b>📦 Packs de ${escapeHtml(model.name)}</b>\n\nEscolha um pack para ver detalhes:`,
+      { parse_mode: 'HTML', reply_markup: keyboard }
+    );
   } catch (error) {
-    logger.error('Error showing product confirmation', { error });
-    await ctx.reply('Erro ao processar. Tente novamente.');
+    logger.error('Error showing packs menu', { error, modelId });
+    await ctx.reply('Erro ao carregar. Tente novamente.');
   }
 }
 
-/**
- * Process payment - Create purchase and PIX
- */
-async function processPayment(ctx: Context, modelId: string, productId: string) {
+// ============ 4. PACK DETAILS ============
+
+async function showPackDetails(ctx: Context, modelId: string, productId: string) {
+  try {
+    const model = await OFModel.findById(modelId);
+    if (!model) {
+      await ctx.reply('Modelo nao encontrada.');
+      return;
+    }
+
+    const pack = model.products.find((p) => p._id.toString() === productId);
+    if (!pack || !pack.isActive) {
+      await ctx.reply('Pack nao disponivel.');
+      return;
+    }
+
+    const price = formatPrice(pack.price, pack.currency);
+
+    const keyboard = new InlineKeyboard()
+      .text(`🔓 Liberar Acesso • ${price}`, `buy_${modelId}_${productId}`)
+      .row()
+      .text('⬅️ Voltar aos packs', `packs_${modelId}`);
+
+    // Send pack preview if available
+    if (pack.previewImages && pack.previewImages.length > 0) {
+      const photoUrl = pack.previewImages[0].startsWith('http')
+        ? pack.previewImages[0]
+        : StorageService.getPublicUrl(pack.previewImages[0]);
+
+      try {
+        await ctx.replyWithPhoto(photoUrl, {
+          caption:
+            `<b>📦 ${escapeHtml(pack.name)}</b>\n\n` +
+            `${pack.description ? escapeHtml(pack.description) + '\n\n' : ''}` +
+            `💰 <b>${price}</b>\n\n` +
+            `<i>Acesso permanente apos a compra</i>`,
+          parse_mode: 'HTML',
+          reply_markup: keyboard,
+        });
+        return;
+      } catch {
+        // continue to text
+      }
+    }
+
+    await ctx.reply(
+      `<b>📦 ${escapeHtml(pack.name)}</b>\n\n` +
+        `${pack.description ? escapeHtml(pack.description) + '\n\n' : ''}` +
+        `💰 <b>${price}</b>\n\n` +
+        `<i>Acesso permanente apos a compra</i>`,
+      { parse_mode: 'HTML', reply_markup: keyboard }
+    );
+  } catch (error) {
+    logger.error('Error showing pack details', { error, modelId, productId });
+    await ctx.reply('Erro ao carregar. Tente novamente.');
+  }
+}
+
+// ============ 5. SUBSCRIPTION OPTION ============
+
+async function showSubscriptionOption(ctx: Context, modelId: string) {
+  try {
+    const model = await OFModel.findById(modelId);
+    if (!model) {
+      await ctx.reply('Modelo nao encontrada.');
+      return;
+    }
+
+    const subscription = model.products.find((p) => p.type === 'subscription' && p.isActive);
+    if (!subscription) {
+      await ctx.reply('Assinatura nao disponivel no momento.');
+      return;
+    }
+
+    const price = formatPrice(subscription.price, subscription.currency);
+
+    const keyboard = new InlineKeyboard()
+      .text(`⭐ Assinar • ${price}/mes`, `buy_${modelId}_${subscription._id}`)
+      .row()
+      .text('⬅️ Voltar', `model_${modelId}`);
+
+    await ctx.reply(
+      `<b>⭐ Assinatura VIP - ${escapeHtml(model.name)}</b>\n\n` +
+        `✅ Acesso a todo conteudo novo\n` +
+        `✅ Chat privado\n` +
+        `✅ Conteudo exclusivo para assinantes\n\n` +
+        `${subscription.description ? escapeHtml(subscription.description) + '\n\n' : ''}` +
+        `💰 <b>${price}/mes</b>\n\n` +
+        `<i>Cancele quando quiser</i>`,
+      { parse_mode: 'HTML', reply_markup: keyboard }
+    );
+  } catch (error) {
+    logger.error('Error showing subscription', { error, modelId });
+    await ctx.reply('Erro ao carregar. Tente novamente.');
+  }
+}
+
+// ============ 6. CHECKOUT ============
+
+async function processCheckout(ctx: Context, modelId: string, productId: string) {
   try {
     const userId = ctx.from?.id;
     if (!userId) {
-      await ctx.reply('Erro: usuário não identificado.');
+      await ctx.reply('Erro: usuario nao identificado.');
       return;
     }
 
-    // Get model and product
     const model = await OFModel.findById(modelId);
     if (!model) {
-      await ctx.reply('Modelo não encontrada.');
+      await ctx.reply('Modelo nao encontrada.');
       return;
     }
 
     const product = model.products.find((p) => p._id.toString() === productId);
     if (!product || !product.isActive) {
-      await ctx.reply('Produto não disponível.');
+      await ctx.reply('Produto nao disponivel.');
       return;
     }
 
-    await ctx.reply('⏳ Gerando pagamento PIX...');
+    await ctx.reply('⏳ Gerando acesso...');
 
-    // Create or update telegram user
+    // Create/update telegram user
     await TelegramUserModel.findOneAndUpdate(
       { telegramId: userId },
       {
@@ -297,7 +408,7 @@ async function processPayment(ctx: Context, modelId: string, productId: string) 
       status: 'pending',
     });
 
-    // Create PIX via Arkama
+    // Generate payment code
     const pixResponse = await ArkamaService.createPixPayment({
       amount: product.price,
       currency: product.currency,
@@ -312,11 +423,11 @@ async function processPayment(ctx: Context, modelId: string, productId: string) 
       transaction.failureReason = pixResponse.error;
       await transaction.save();
 
-      await ctx.reply('❌ Erro ao gerar pagamento. Tente novamente.');
+      await ctx.reply('❌ Erro ao gerar acesso. Tente novamente.');
       return;
     }
 
-    // Update transaction with PIX data
+    // Update transaction
     transaction.externalId = pixResponse.data.id;
     transaction.pixKey = pixResponse.data.pixKey;
     transaction.pixQrCode = pixResponse.data.pixQrCode;
@@ -325,58 +436,48 @@ async function processPayment(ctx: Context, modelId: string, productId: string) 
     transaction.status = 'processing';
     await transaction.save();
 
-    // Update purchase with transaction reference
     purchase.transactionId = transaction._id;
     await purchase.save();
 
-    // Send PIX details to user
     const price = formatPrice(product.price, product.currency);
-    const expiresIn = Math.ceil(
-      (pixResponse.data.expiresAt.getTime() - Date.now()) / 60000
-    );
-
-    const paymentMessage =
-      `✅ *Pagamento PIX Gerado*\n\n` +
-      `*Valor:* ${price}\n` +
-      `*Expira em:* ${expiresIn} minutos\n\n` +
-      `📋 *PIX Copia e Cola:*\n` +
-      `\`${pixResponse.data.pixCopyPaste}\`\n\n` +
-      `Copie o código acima e cole no seu app de banco.\n\n` +
-      `⏳ O pagamento será confirmado automaticamente em alguns segundos.`;
+    const expiresIn = Math.ceil((pixResponse.data.expiresAt.getTime() - Date.now()) / 60000);
 
     const keyboard = new InlineKeyboard()
-      .text('🔄 Verificar Pagamento', `check_payment_${purchase._id}`)
+      .text('✅ Ja transferi', `check_${purchase._id}`)
       .row()
-      .text('❌ Cancelar', 'cancel_purchase');
+      .text('❌ Cancelar', 'cancel');
 
-    await ctx.reply(paymentMessage, {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard,
-    });
+    await ctx.reply(
+      `<b>💳 Finalizar Compra</b>\n\n` +
+        `📦 ${escapeHtml(product.name)}\n` +
+        `💰 <b>${price}</b>\n` +
+        `⏰ Expira em ${expiresIn} min\n\n` +
+        `<b>Codigo:</b>\n<code>${pixResponse.data.pixCopyPaste}</code>\n\n` +
+        `👆 Toque no codigo para copiar\nCole no app do seu banco`,
+      { parse_mode: 'HTML', reply_markup: keyboard }
+    );
   } catch (error) {
-    logger.error('Error processing payment', { error });
-    await ctx.reply('❌ Erro ao processar pagamento. Tente novamente.');
+    logger.error('Error processing checkout', { error });
+    await ctx.reply('❌ Erro ao processar. Tente novamente.');
   }
 }
 
-/**
- * Check payment status
- */
+// ============ 7. CHECK PAYMENT ============
+
 async function checkPaymentStatus(ctx: Context, purchaseId: string) {
   try {
     const purchase = await PurchaseModel.findById(purchaseId);
     if (!purchase) {
-      await ctx.reply('Compra não encontrada.');
+      await ctx.reply('Compra nao encontrada.');
       return;
     }
 
     const transaction = await TransactionModel.findById(purchase.transactionId);
     if (!transaction || !transaction.externalId) {
-      await ctx.reply('Transação não encontrada.');
+      await ctx.reply('Transacao nao encontrada.');
       return;
     }
 
-    // Check with Arkama
     const statusResponse = await ArkamaService.checkPaymentStatus({
       paymentId: transaction.externalId,
     });
@@ -385,7 +486,6 @@ async function checkPaymentStatus(ctx: Context, purchaseId: string) {
       const status = statusResponse.data.status;
 
       if (status === 'paid') {
-        // Update records
         transaction.status = 'paid';
         transaction.paidAt = statusResponse.data.paidAt || new Date();
         await transaction.save();
@@ -393,27 +493,22 @@ async function checkPaymentStatus(ctx: Context, purchaseId: string) {
         purchase.status = 'paid';
         await purchase.save();
 
-        // Update user stats
         await TelegramUserModel.findOneAndUpdate(
           { telegramId: purchase.telegramUserId },
-          {
-            $inc: {
-              totalPurchases: 1,
-              totalSpent: purchase.amount,
-            },
-          }
+          { $inc: { totalPurchases: 1, totalSpent: purchase.amount } }
         );
 
-        // Get model info for confirmation
         const model = await OFModel.findById(purchase.modelId);
 
+        const keyboard = new InlineKeyboard()
+          .text('🔥 Ver mais conteudo', 'back_to_models');
+
         await ctx.reply(
-          `✅ *Pagamento Confirmado!*\n\n` +
-            `Obrigado pela sua compra!\n\n` +
-            `*Produto:* ${purchase.productSnapshot.name}\n` +
-            `*Modelo:* ${model?.name || 'N/A'}\n\n` +
-            `Seu acesso será liberado em breve. Use /history para ver suas compras.`,
-          { parse_mode: 'Markdown' }
+          `🎉 <b>Acesso Liberado!</b>\n\n` +
+            `📦 ${escapeHtml(purchase.productSnapshot.name)}\n` +
+            `👤 ${model?.name || 'N/A'}\n\n` +
+            `<i>Seu conteudo sera enviado em instantes</i>`,
+          { parse_mode: 'HTML', reply_markup: keyboard }
         );
         return;
       } else if (status === 'expired') {
@@ -422,9 +517,12 @@ async function checkPaymentStatus(ctx: Context, purchaseId: string) {
         purchase.status = 'expired';
         await purchase.save();
 
+        const keyboard = new InlineKeyboard()
+          .text('🔄 Tentar novamente', 'back_to_models');
+
         await ctx.reply(
-          '⏰ *Pagamento Expirado*\n\nO tempo para pagamento expirou. Use /models para iniciar uma nova compra.',
-          { parse_mode: 'Markdown' }
+          '⏰ <b>Tempo esgotado</b>\n\nO codigo expirou. Tente novamente.',
+          { parse_mode: 'HTML', reply_markup: keyboard }
         );
         return;
       }
@@ -432,46 +530,36 @@ async function checkPaymentStatus(ctx: Context, purchaseId: string) {
 
     // Still pending
     const keyboard = new InlineKeyboard()
-      .text('🔄 Verificar Novamente', `check_payment_${purchaseId}`)
+      .text('✅ Ja transferi', `check_${purchaseId}`)
       .row()
-      .text('❌ Cancelar', 'cancel_purchase');
+      .text('❌ Cancelar', 'cancel');
 
     await ctx.reply(
-      '⏳ *Aguardando Pagamento*\n\nAinda não recebemos o pagamento. Verifique se o PIX foi enviado corretamente.',
-      {
-        parse_mode: 'Markdown',
-        reply_markup: keyboard,
-      }
+      '⏳ <b>Aguardando...</b>\n\nAinda nao identificamos. Se ja transferiu, aguarde alguns segundos.',
+      { parse_mode: 'HTML', reply_markup: keyboard }
     );
   } catch (error) {
-    logger.error('Error checking payment status', { error });
-    await ctx.reply('Erro ao verificar pagamento. Tente novamente.');
+    logger.error('Error checking payment', { error });
+    await ctx.reply('Erro ao verificar. Tente novamente.');
   }
 }
 
-/**
- * Cancel purchase
- */
+// ============ 8. CANCEL ============
+
 async function cancelPurchase(ctx: Context) {
-  const userId = ctx.from?.id;
-  if (userId) {
-    pendingPurchases.delete(userId);
-  }
+  const keyboard = new InlineKeyboard()
+    .text('🔥 Ver modelos', 'back_to_models');
 
-  await ctx.reply(
-    '❌ Compra cancelada.\n\nUse /models para ver as modelos disponíveis.',
-    { parse_mode: 'Markdown' }
-  );
+  await ctx.reply('❌ Cancelado.\n\nVolte quando quiser!', { reply_markup: keyboard });
 }
 
-/**
- * Show purchase history
- */
+// ============ 9. HISTORY ============
+
 async function showPurchaseHistory(ctx: Context) {
   try {
     const userId = ctx.from?.id;
     if (!userId) {
-      await ctx.reply('Erro: usuário não identificado.');
+      await ctx.reply('Erro: usuario nao identificado.');
       return;
     }
 
@@ -481,52 +569,34 @@ async function showPurchaseHistory(ctx: Context) {
     })
       .sort({ createdAt: -1 })
       .limit(10)
-      .populate('modelId', 'name username');
+      .populate('modelId', 'name');
+
+    const keyboard = new InlineKeyboard()
+      .text('🔥 Ver modelos', 'back_to_models');
 
     if (purchases.length === 0) {
       await ctx.reply(
-        '📋 *Histórico de Compras*\n\nVocê ainda não fez nenhuma compra.\n\nUse /models para ver as modelos disponíveis.',
-        { parse_mode: 'Markdown' }
+        '<b>📋 Minhas Compras</b>\n\nVoce ainda nao fez nenhuma compra.',
+        { parse_mode: 'HTML', reply_markup: keyboard }
       );
       return;
     }
 
-    let message = '📋 *Histórico de Compras*\n\n';
+    let message = '<b>📋 Minhas Compras</b>\n\n';
 
     purchases.forEach((purchase, idx) => {
       const date = purchase.createdAt.toLocaleDateString('pt-BR');
       const price = formatPrice(purchase.amount, purchase.currency);
       const model = purchase.modelId as unknown as { name: string };
-      const statusEmoji = purchase.status === 'completed' ? '✅' : '💰';
 
-      message +=
-        `${idx + 1}. ${statusEmoji} *${purchase.productSnapshot.name}*\n` +
-        `   Modelo: ${model?.name || 'N/A'}\n` +
-        `   Valor: ${price}\n` +
-        `   Data: ${date}\n\n`;
+      message += `${idx + 1}. <b>${escapeHtml(purchase.productSnapshot.name)}</b>\n`;
+      message += `   👤 ${model?.name || 'N/A'}\n`;
+      message += `   💰 ${price} • ${date}\n\n`;
     });
 
-    await ctx.reply(message, { parse_mode: 'Markdown' });
+    await ctx.reply(message, { parse_mode: 'HTML', reply_markup: keyboard });
   } catch (error) {
-    logger.error('Error showing purchase history', { error });
-    await ctx.reply('Erro ao carregar histórico. Tente novamente.');
+    logger.error('Error showing history', { error });
+    await ctx.reply('Erro ao carregar. Tente novamente.');
   }
-}
-
-// Helper functions
-function getTierEmoji(tier: string): string {
-  const emojis: Record<string, string> = {
-    platinum: '💎',
-    gold: '🥇',
-    silver: '🥈',
-    bronze: '🥉',
-  };
-  return emojis[tier] || '⭐';
-}
-
-function formatPrice(price: number, currency: string): string {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency,
-  }).format(price);
 }

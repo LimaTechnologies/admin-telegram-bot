@@ -1,9 +1,9 @@
 # Domain: Infrastructure
 
 ## Last Update
-- **Date:** 2026-02-07
-- **Commit:** (session changes)
-- **Summary:** Changed dashboard port from 3000 to 3001 in docker-compose.yml for production compatibility
+- **Date:** 2026-02-10
+- **Commit:** (model purchase feature)
+- **Summary:** Added seed-demo-model.ts script for testing purchase flow with demo model and promotional messages
 
 ## Files
 
@@ -22,6 +22,7 @@
 ### Scripts
 - `scripts/create-s3-bucket.ts` - Creates S3 bucket for file storage
 - `scripts/test-connections.ts` - Tests MongoDB and S3 connectivity
+- `scripts/seed-demo-model.ts` - NEW: Creates demo model with preview photos and products for purchase flow testing
 
 ### Services
 - `services/bot/` - grammY Telegram bot
@@ -94,6 +95,65 @@ S3_ACCESS_KEY=...
 S3_SECRET_KEY=...
 ```
 
+### Seed Demo Model Script
+
+#### Purpose
+Creates a demo OnlyFans model ("Amanda Silva") with preview photos and 3 products for testing the Telegram purchase flow.
+
+#### Usage
+```bash
+# Just create the model
+bun scripts/seed-demo-model.ts
+
+# Create model + send promotional message to registered groups
+bun scripts/seed-demo-model.ts --promo
+```
+
+#### What It Creates
+- **Model:** Amanda Silva (gold tier, Brazilian)
+- **Preview Photos:** 4 Unsplash photos (gallery preview)
+- **Products:**
+  1. Pack Verao (R$29.90) - 15 photos, content type
+  2. Pack Fitness (R$49.90) - 20 photos + 3 videos, PPV type
+  3. Assinatura VIP (R$79.90) - subscription type
+- **Promotional Message:** Sent to first active group (if --promo flag)
+
+#### Key Features
+- Idempotent (updates existing model if found)
+- Uses real Unsplash URLs for realistic preview
+- Generates deep link for group promotion
+- Shows bot username dynamically
+- Handles API errors gracefully
+
+#### Output
+```
+✅ Demo model ready!
+   Name: Amanda Silva
+   Username: @amanda_exclusive
+   ID: 507f1f77bcf86cd799439011
+   Products: 3
+   Tier: gold
+
+📢 Sending promo to group: My Group
+✅ Promotional message sent!
+   Group: My Group
+   Deep link: https://t.me/@botusername?start=model_507f1f77bcf86cd799439011
+
+🎉 Done!
+```
+
+#### Deep Link Format
+```
+https://t.me/@botusername?start=model_<modelId>
+```
+Clicking this link starts the bot with the model profile showing directly.
+
+#### Group Promotion
+- Sends photo + caption with action button
+- Button text: "🔥 Quero Ver Mais" (I Want to See More)
+- Links directly to model profile via deep link
+- Requires bot to be admin in group
+
 ### Gotchas
 - Use bracket notation for env vars: `process.env['VARIABLE']`
 - Redis connection uses singleton pattern
@@ -103,3 +163,5 @@ S3_SECRET_KEY=...
 - MongoDB and S3 are EXTERNAL services (not in docker-compose)
 - Run `bun run scripts/create-s3-bucket.ts` to create the S3 bucket
 - Run `bun run scripts/test-connections.ts` to verify connectivity
+- Run `bun scripts/seed-demo-model.ts` to prepare demo data for purchase testing
+- Seed script updates existing model by username (idempotent)

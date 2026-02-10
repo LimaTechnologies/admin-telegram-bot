@@ -1,16 +1,16 @@
 # Domain: Database (MongoDB + Mongoose)
 
 ## Last Update
-- **Date:** 2026-01-26
-- **Commit:** ef480b4
-- **Summary:** 14 Mongoose models for Telegram Ads Dashboard
+- **Date:** 2026-02-10
+- **Commit:** (model purchase feature)
+- **Summary:** Purchase, Transaction, TelegramUser models for PIX payment system. OFModel includes products array and preview photos.
 
 ## Files
 
 ### Connection
 - `common/db/index.ts` - MongoDB connection singleton
 
-### Models (14 total)
+### Models (17 total)
 - `user.model.ts` - Admin users with roles (admin, operator)
 - `session.model.ts` - HTTP-only session storage
 - `magic-link.model.ts` - Login tokens (15min TTL)
@@ -19,11 +19,14 @@
 - `creative.model.ts` - Ad content (image/video/text)
 - `scheduled-post.model.ts` - Queue entries for posting
 - `post-history.model.ts` - Execution logs with metrics
-- `model.model.ts` - OnlyFans creators
+- `model.model.ts` - OnlyFans creators with products array
 - `casino.model.ts` - Casino brands with risk levels
 - `deal.model.ts` - Revenue agreements
 - `settings.model.ts` - Bot configuration (single doc)
 - `audit-log.model.ts` - All user actions logged
+- `purchase.model.ts` - NEW: Bot purchase records (telegramUserId, modelId, productId, status)
+- `transaction.model.ts` - NEW: Payment transactions (purchaseId, paymentMethod, PIX data, status)
+- `telegram-user.model.ts` - NEW: Bot users with purchase stats
 
 ### Index Export
 - `common/models/index.ts` - Re-exports all models
@@ -34,8 +37,86 @@
 - **utilities** - Services use models for business logic
 
 ## Recent Commits
+- 2026-02-10 - feat: implement model purchase system with PIX payments (Arkama)
 - `c4cf62c` - feat: add all missing dashboard pages
 - Initial model implementation
+
+## Purchase Models (NEW - 2026-02-10)
+
+### Purchase Model
+```typescript
+{
+  telegramUserId: number;
+  telegramUsername?: string;
+  telegramFirstName?: string;
+  telegramLastName?: string;
+  modelId: ObjectId;          // Reference to OFModel
+  productId: ObjectId;        // Reference to OFModel.products[i]._id
+  productSnapshot: {
+    name: string;
+    type: 'content' | 'ppv' | 'subscription';
+    price: number;
+    currency: string;
+  };
+  amount: number;
+  currency: string;
+  status: 'pending' | 'processing' | 'paid' | 'failed' | 'expired' | 'completed';
+  transactionId?: ObjectId;   // Reference to Transaction
+  createdAt: Date;
+  updatedAt: Date;
+}
+```
+
+### Transaction Model
+```typescript
+{
+  purchaseId: ObjectId;       // Reference to Purchase
+  paymentMethod: 'pix';       // Future: 'credit_card', 'boleto'
+  amount: number;
+  currency: string;
+  status: 'pending' | 'processing' | 'paid' | 'failed' | 'expired';
+  externalId?: string;        // Arkama order ID (reconciliation)
+  pixKey?: string;            // Reference key
+  pixQrCode?: string;         // QR code URL
+  pixCopyPaste?: string;      // EMV format (copia e cola)
+  pixExpiresAt?: Date;        // Code expiry (30 min)
+  paidAt?: Date;
+  failureReason?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+```
+
+### TelegramUser Model
+```typescript
+{
+  telegramId: number;
+  username?: string;
+  firstName?: string;
+  lastName?: string;
+  totalPurchases: number;     // Counter for analytics
+  totalSpent: number;         // Total amount spent (BRL)
+  lastPurchaseAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+```
+
+### OFModel Updates
+```typescript
+// Added fields:
+previewPhotos?: string[];     // 1-4 gallery photos
+products: [{
+  _id: ObjectId;
+  name: string;
+  description?: string;
+  type: 'content' | 'ppv' | 'subscription';
+  price: number;
+  currency: 'BRL' | 'USD';
+  previewImages?: string[];   // Pack preview images
+  isActive: boolean;
+}];
+```
 
 ## Attention Points
 

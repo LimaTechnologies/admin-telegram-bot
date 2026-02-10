@@ -1,9 +1,9 @@
 # Domain: API (tRPC)
 
 ## Last Update
-- **Date:** 2027-01-27
-- **Commit:** 3972e6e
-- **Summary:** Added scheduledPost router + CRUD mutations for campaign and creative routers
+- **Date:** 2026-02-07
+- **Commit:** 5216399
+- **Summary:** Implemented model purchase system - added purchase router with PIX payment integration
 
 ## Files
 
@@ -12,19 +12,20 @@
 - `src/server/trpc/routers/index.ts` - Router aggregation
 - `src/app/api/trpc/[trpc]/route.ts` - Next.js API handler
 
-### Routers (13 total)
+### Routers (14 total)
 - `auth.router.ts` - Authentication (login, verify, logout, getSession)
 - `user.router.ts` - User CRUD (admin only)
 - `group.router.ts` - Telegram group management + create mutation
 - `campaign.router.ts` - Campaign CRUD with auditing + create mutation
 - `creative.router.ts` - Creative assets management + create mutation
-- `model.router.ts` - OnlyFans model management
+- `model.router.ts` - OnlyFans model management + photo upload + products
 - `casino.router.ts` - Casino brand management
 - `deal.router.ts` - Revenue deals management
 - `settings.router.ts` - Bot settings
 - `audit.router.ts` - Audit log viewing (admin only)
 - `analytics.router.ts` - Performance metrics
-- `scheduledPost.router.ts` - NEW: Scheduled post CRUD (list, getById, create, update, delete, getStats)
+- `scheduledPost.router.ts` - Scheduled post CRUD (list, getById, create, update, delete, getStats)
+- `purchase.router.ts` - NEW: Purchase tracking and management (list, getById, getStats, getByTelegramUser)
 
 ### Middleware
 - `src/server/trpc/middleware/audit.middleware.ts` - Auto-logs all mutations
@@ -39,6 +40,7 @@
 - **pages** - All dashboard pages consume tRPC queries/mutations
 
 ## Recent Commits
+- `5216399` - feat: implement model purchase system with PIX payments
 - `3972e6e` - feat: add scheduledPost router + CRUD mutations for campaign/creative/group routers
 - `c4cf62c` - feat: add all missing dashboard pages
 - Initial API implementation with all routers
@@ -136,6 +138,32 @@ export const groupRouter = t.router({
 **Files Modified:**
 - `src/server/trpc/routers/group.router.ts`
 - `src/server/trpc/routers/creative.router.ts`
+
+#### 2026-02-07 - Model Photo Upload Integration
+
+**Problem:** Model router needed to support photo uploads via presigned URLs for dashboard photo manager component.
+
+**Root Cause:** No existing pattern for presigned URL generation in tRPC routers.
+
+**Solution:** Added `getPhotoUploadUrl` procedure to model router that generates presigned S3 URLs via StorageService. Returns { uploadUrl, s3Key } for browser upload, then s3Key is added to model's previewPhotos array.
+
+**Prevention:** Use StorageService.getPresignedUploadUrl() for all user file uploads. Keep uploaded s3Keys in model, use StorageService.getPublicUrl() for display.
+
+**Files Modified:**
+- `src/server/trpc/routers/model.router.ts`
+
+#### 2026-02-07 - Purchase Router Design
+
+**Problem:** How to track Telegram bot purchases in dashboard without exposing user IDs.
+
+**Root Cause:** Bot purchases happen outside dashboard auth context.
+
+**Solution:** Created purchase.router with read-only queries (list, getById, getStats, getByTelegramUser). All purchase creation happens in bot via PurchaseModel directly. Router only queries existing data for dashboard analytics.
+
+**Prevention:** Separate write concerns (bot creates purchases) from read concerns (dashboard views analytics). Use router metadata to indicate read-only.
+
+**Files Modified:**
+- `src/server/trpc/routers/purchase.router.ts`
 
 #### 2027-01-27 - Default Values in Mongoose Schemas
 
