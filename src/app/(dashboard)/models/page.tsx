@@ -115,17 +115,20 @@ export default function ModelsPage() {
       key: 'name',
       header: 'Model',
       cell: (row) => (
-        <div className="flex items-center gap-3">
+        <Link
+          href={`/models/${row._id}`}
+          className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+        >
           <Avatar className="h-10 w-10">
             <AvatarFallback className="bg-pink-500/10 text-pink-500">
               {row.name?.charAt(0) || 'M'}
             </AvatarFallback>
           </Avatar>
           <div>
-            <div className="font-medium">{row.name}</div>
+            <div className="font-medium hover:underline">{row.name}</div>
             <div className="text-sm text-muted-foreground">@{row.username}</div>
           </div>
-        </div>
+        </Link>
       ),
     },
     {
