@@ -221,7 +221,9 @@ export const modelRouter = router({
       z.object({
         fileName: z.string(),
         mimeType: z.string(),
-        folder: z.enum(['models', 'products']).default('models'),
+        folder: z
+          .enum(['models', 'products', 'product-previews', 'product-content'])
+          .default('models'),
       })
     )
     .mutation(async ({ input }) => {
@@ -373,6 +375,77 @@ export const modelRouter = router({
       );
       if (!model) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Model not found' });
+      }
+      return model.toObject();
+    }),
+
+  // ===== PRODUCT PHOTO MANAGEMENT =====
+
+  // Add photo to product (preview or content)
+  addProductPhoto: operatorProcedure
+    .input(
+      z.object({
+        modelId: z.string(),
+        productId: z.string(),
+        s3Key: z.string(),
+        photoType: z.enum(['preview', 'content']),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const field =
+        input.photoType === 'preview'
+          ? 'products.$.previewImages'
+          : 'products.$.contentPhotos';
+
+      const model = await OFModel.findOneAndUpdate(
+        { _id: input.modelId, 'products._id': input.productId },
+        {
+          $push: { [field]: input.s3Key },
+          $set: { 'products.$.updatedAt': new Date() },
+        },
+        { new: true }
+      );
+      if (!model) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Model or product not found',
+        });
+      }
+      return model.toObject();
+    }),
+
+  // Remove photo from product
+  removeProductPhoto: operatorProcedure
+    .input(
+      z.object({
+        modelId: z.string(),
+        productId: z.string(),
+        s3Key: z.string(),
+        photoType: z.enum(['preview', 'content']),
+      })
+    )
+    .mutation(async ({ input }) => {
+      // Remove from S3
+      await StorageService.deleteFile(input.s3Key);
+
+      const field =
+        input.photoType === 'preview'
+          ? 'products.$.previewImages'
+          : 'products.$.contentPhotos';
+
+      const model = await OFModel.findOneAndUpdate(
+        { _id: input.modelId, 'products._id': input.productId },
+        {
+          $pull: { [field]: input.s3Key },
+          $set: { 'products.$.updatedAt': new Date() },
+        },
+        { new: true }
+      );
+      if (!model) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Model or product not found',
+        });
       }
       return model.toObject();
     }),

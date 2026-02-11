@@ -1,7 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { Heart, Plus, MoreVertical, Search, TrendingUp, Package, Image as ImageIcon } from 'lucide-react';
+import Link from 'next/link';
+import {
+  Heart,
+  Plus,
+  MoreVertical,
+  Search,
+  TrendingUp,
+  Package,
+  Image as ImageIcon,
+  ExternalLink,
+} from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import { DataTable } from '@/components/shared/data-table';
 import { Button } from '@/components/ui/button';
@@ -35,15 +45,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { ModelDetailDialog } from './_components/model-detail-dialog';
 
 export default function ModelsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [tierFilter, setTierFilter] = useState<'bronze' | 'silver' | 'gold' | 'platinum' | 'all'>('all');
+  const [tierFilter, setTierFilter] = useState<
+    'bronze' | 'silver' | 'gold' | 'platinum' | 'all'
+  >('all');
   const [createOpen, setCreateOpen] = useState(false);
-  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
-  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     username: '',
@@ -197,16 +206,24 @@ export default function ModelsPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onClick={() => {
-                setSelectedModelId(row._id);
-                setDetailDialogOpen(true);
-              }}
-            >
-              <ImageIcon className="mr-2 h-4 w-4" />
-              Photos & Products
+            <DropdownMenuItem asChild>
+              <Link href={`/models/${row._id}`}>
+                <ExternalLink className="mr-2 h-4 w-4" />
+                View Details
+              </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem>View Campaigns</DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href={`/models/${row._id}/photos`}>
+                <ImageIcon className="mr-2 h-4 w-4" />
+                Manage Photos
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href={`/models/${row._id}/products`}>
+                <Package className="mr-2 h-4 w-4" />
+                Manage Products
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-destructive"
@@ -387,17 +404,6 @@ export default function ModelsPage() {
           </Button>
         </div>
       )}
-
-      {/* Model Detail Dialog */}
-      <ModelDetailDialog
-        modelId={selectedModelId}
-        open={detailDialogOpen}
-        onOpenChange={setDetailDialogOpen}
-        onSuccess={() => {
-          refetch();
-          setDetailDialogOpen(false);
-        }}
-      />
     </div>
   );
 }
