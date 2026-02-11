@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** feature/model-purchase-pix-payment
-**Date:** 2026-02-10
-**Summary:** Complete PIX payment system with Arkama API integration. Bot flow: deep link → gallery preview → packs/subscription → checkout with QR code → content delivery. Added webhook for payment confirmation, contentPhotos field for product content, and purchase reports in dashboard.
+**Branch:** feature/model-detail-pages
+**Date:** 2026-02-11
+**Summary:** Migrated model editing from modals to dedicated pages with dynamic routes. New structure: `/models/[id]` (info), `/models/[id]/photos`, `/models/[id]/products`, `/models/[id]/products/[productId]`. Added contentPhotos and previewImages upload for products. Removed old modal-based editing.
 
 ---
 
@@ -73,7 +73,9 @@ project-root/
 │   │   │   ├── scheduling/        # Calendar + Rotation
 │   │   │   ├── revenue/           # Deals + Revenue
 │   │   │   ├── analytics/         # Performance
-│   │   │   ├── models/            # OnlyFans Models
+│   │   │   ├── models/            # OnlyFans Models (detail pages)
+│   │   │   │   └── [id]/          # /models/:id (tabs: info, photos, products)
+│   │   │   │       └── products/[productId]/ # Product edit with contentPhotos
 │   │   │   ├── casinos/           # Casino Brands
 │   │   │   ├── spam-controls/     # Safety Controls
 │   │   │   ├── reports/           # Exports
