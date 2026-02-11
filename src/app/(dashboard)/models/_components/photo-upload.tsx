@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Upload, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc/client';
+import { ImageCropper } from '@/components/shared/image-cropper';
 
 interface PhotoUploadProps {
   modelId: string;
@@ -14,6 +15,10 @@ interface PhotoUploadProps {
 
 export function PhotoUpload({ modelId, photos, onPhotosChange }: PhotoUploadProps) {
   const [uploading, setUploading] = useState(false);
+  const [cropperOpen, setCropperOpen] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [currentFileIndex, setCurrentFileIndex] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const getUploadUrl = trpc.model.getUploadUrl.useMutation();
   const addPhoto = trpc.model.addPhoto.useMutation({
@@ -31,52 +36,94 @@ export function PhotoUpload({ modelId, photos, onPhotosChange }: PhotoUploadProp
     onError: (e) => toast.error(e.message),
   });
 
+  // Upload a single file to S3
+  const uploadFile = async (file: File) => {
+    const { url, key } = await getUploadUrl.mutateAsync({
+      fileName: file.name,
+      mimeType: file.type || 'image/jpeg',
+      folder: 'models',
+    });
+
+    const uploadRes = await fetch(url, {
+      method: 'PUT',
+      body: file,
+      headers: {
+        'Content-Type': file.type || 'image/jpeg',
+      },
+    });
+
+    if (!uploadRes.ok) {
+      throw new Error('Failed to upload file');
+    }
+
+    await addPhoto.mutateAsync({ modelId, s3Key: key });
+  };
+
+  // Handle file selection - open cropper for first file
   const handleFileSelect = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
+    (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
       if (!files?.length) return;
 
-      setUploading(true);
-      try {
-        for (const file of Array.from(files)) {
-          // Get presigned URL
-          const { url, key } = await getUploadUrl.mutateAsync({
-            fileName: file.name,
-            mimeType: file.type,
-            folder: 'models',
-          });
+      const fileArray = Array.from(files);
+      setPendingFiles(fileArray);
+      setCurrentFileIndex(0);
+      setCropperOpen(true);
 
-          // Upload to S3
-          const uploadRes = await fetch(url, {
-            method: 'PUT',
-            body: file,
-            headers: {
-              'Content-Type': file.type,
-            },
-          });
-
-          if (!uploadRes.ok) {
-            throw new Error('Failed to upload file');
-          }
-
-          // Add photo to model
-          await addPhoto.mutateAsync({ modelId, s3Key: key });
-        }
-      } catch (error) {
-        toast.error('Failed to upload photo');
-        console.error(error);
-      } finally {
-        setUploading(false);
-        e.target.value = '';
+      // Reset input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
       }
     },
-    [modelId, getUploadUrl, addPhoto]
+    []
   );
+
+  // Handle crop complete - upload and move to next file
+  const handleCropComplete = async (croppedFile: File) => {
+    setUploading(true);
+    try {
+      await uploadFile(croppedFile);
+
+      // Move to next file if any
+      const nextIndex = currentFileIndex + 1;
+      if (nextIndex < pendingFiles.length) {
+        setCurrentFileIndex(nextIndex);
+        setCropperOpen(true);
+      } else {
+        // All files processed
+        setPendingFiles([]);
+        setCurrentFileIndex(0);
+      }
+    } catch (error) {
+      toast.error('Failed to upload photo');
+      console.error(error);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Handle cropper cancel - skip current file
+  const handleCropperClose = (open: boolean) => {
+    if (!open) {
+      // Move to next file or finish
+      const nextIndex = currentFileIndex + 1;
+      if (nextIndex < pendingFiles.length) {
+        setCurrentFileIndex(nextIndex);
+        setCropperOpen(true);
+      } else {
+        setPendingFiles([]);
+        setCurrentFileIndex(0);
+        setCropperOpen(false);
+      }
+    }
+  };
 
   const handleRemove = async (s3Key: string) => {
     if (!confirm('Remove this photo?')) return;
     await removePhoto.mutateAsync({ modelId, s3Key });
   };
+
+  const currentFile = pendingFiles[currentFileIndex] || null;
 
   return (
     <div className="space-y-4">
@@ -84,6 +131,7 @@ export function PhotoUpload({ modelId, photos, onPhotosChange }: PhotoUploadProp
         <h4 className="text-sm font-medium">Preview Photos</h4>
         <label>
           <input
+            ref={fileInputRef}
             type="file"
             accept="image/*"
             multiple
@@ -126,6 +174,22 @@ export function PhotoUpload({ modelId, photos, onPhotosChange }: PhotoUploadProp
             </div>
           ))}
         </div>
+      )}
+
+      {/* Image Cropper Modal */}
+      <ImageCropper
+        file={currentFile}
+        open={cropperOpen}
+        onOpenChange={handleCropperClose}
+        onCropComplete={handleCropComplete}
+        aspectRatioPreset="1:1"
+      />
+
+      {/* Progress indicator for multiple files */}
+      {pendingFiles.length > 1 && cropperOpen && (
+        <p className="text-sm text-muted-foreground text-center">
+          Photo {currentFileIndex + 1} of {pendingFiles.length}
+        </p>
       )}
     </div>
   );

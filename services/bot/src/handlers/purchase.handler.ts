@@ -576,6 +576,7 @@ async function deliverContent(ctx: Context, purchase: InstanceType<typeof Purcha
     }
 
     const product = model.products.find((p) => p._id.toString() === purchase.productId?.toString());
+    const isSubscription = purchase.productSnapshot.type === 'subscription';
 
     const keyboard = new InlineKeyboard().text('🔥 Ver mais conteudo', 'back_to_models');
 
@@ -591,6 +592,10 @@ async function deliverContent(ctx: Context, purchase: InstanceType<typeof Purcha
     // Deliver content photos
     const photos = product?.contentPhotos || [];
 
+    // Track sent message IDs for subscription expiration
+    const sentMessageIds: number[] = [];
+    const chatId = ctx.chat?.id;
+
     if (photos.length > 0) {
       // Send in batches of 10 (Telegram limit for media groups)
       for (let i = 0; i < photos.length; i += 10) {
@@ -599,9 +604,11 @@ async function deliverContent(ctx: Context, purchase: InstanceType<typeof Purcha
         if (batch.length === 1) {
           // Single photo
           try {
-            await ctx.replyWithPhoto(getPhotoUrl(batch[0]));
+            const msg = await ctx.replyWithPhoto(getPhotoUrl(batch[0]));
+            sentMessageIds.push(msg.message_id);
           } catch {
-            await ctx.reply(`📸 ${getPhotoUrl(batch[0])}`);
+            const msg = await ctx.reply(`📸 ${getPhotoUrl(batch[0])}`);
+            sentMessageIds.push(msg.message_id);
           }
         } else {
           // Media group
@@ -611,14 +618,17 @@ async function deliverContent(ctx: Context, purchase: InstanceType<typeof Purcha
           }));
 
           try {
-            await ctx.replyWithMediaGroup(mediaGroup);
+            const msgs = await ctx.replyWithMediaGroup(mediaGroup);
+            sentMessageIds.push(...msgs.map((m) => m.message_id));
           } catch (mediaError) {
             logger.error('Media group failed, sending individually', { error: mediaError });
             for (const photo of batch) {
               try {
-                await ctx.replyWithPhoto(getPhotoUrl(photo));
+                const msg = await ctx.replyWithPhoto(getPhotoUrl(photo));
+                sentMessageIds.push(msg.message_id);
               } catch {
-                await ctx.reply(`📸 ${getPhotoUrl(photo)}`);
+                const msg = await ctx.reply(`📸 ${getPhotoUrl(photo)}`);
+                sentMessageIds.push(msg.message_id);
               }
             }
           }
@@ -633,6 +643,29 @@ async function deliverContent(ctx: Context, purchase: InstanceType<typeof Purcha
       // No content photos - just show success
       await ctx.reply(`✅ Compra confirmada!\n\nO conteudo sera enviado em breve.`, { reply_markup: keyboard });
     }
+
+    // Update purchase with sent messages and expiration (for subscriptions)
+    if (chatId && sentMessageIds.length > 0) {
+      purchase.sentMessages = [{ chatId, messageIds: sentMessageIds }];
+    }
+
+    if (isSubscription) {
+      // Set access expiration to 30 days from now
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 30);
+      purchase.accessExpiresAt = expiresAt;
+    }
+
+    purchase.status = 'completed';
+    purchase.deliveredAt = new Date();
+    await purchase.save();
+
+    logger.info('Content delivered', {
+      purchaseId: purchase._id,
+      isSubscription,
+      messageCount: sentMessageIds.length,
+      accessExpiresAt: purchase.accessExpiresAt,
+    });
   } catch (error) {
     logger.error('Error delivering content', { error });
     await ctx.reply('🎉 Acesso liberado! O conteudo sera enviado em breve.');

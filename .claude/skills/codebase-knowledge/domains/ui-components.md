@@ -1,9 +1,9 @@
 # Domain: UI Components
 
 ## Last Update
-- **Date:** 2026-02-07
-- **Commit:** 5216399
-- **Summary:** Added photo upload, product manager, and model detail dialog components
+- **Date:** 2026-02-11
+- **Commit:** 25f97e0
+- **Summary:** Completed ImageCropper component with react-image-crop integration. Photo upload components now support cropping before S3 upload with aspect ratio presets (free, 1:1, 4:3, 16:9, 9:16).
 
 ## Files
 
@@ -14,6 +14,7 @@
 ### Shared Components
 - `src/components/shared/data-table.tsx` - Reusable data table
 - `src/components/shared/stats-card.tsx` - KPI display card
+- `src/components/shared/image-cropper.tsx` - Image cropping dialog with aspect ratio presets
 
 ### Page-Specific Components
 - `src/app/(dashboard)/models/_components/photo-upload.tsx` - Multi-photo upload with S3 presigned URLs
@@ -45,10 +46,11 @@
 - **api** - Providers wrap tRPC client
 
 ## Recent Commits
+- 25f97e0 - feat: add clickable model name to open detail page
+- 4c4a76b - docs: update CLAUDE.md with model detail pages changes
+- 48ae98e - feat: migrate model editing from modals to dedicated pages
+- (2026-02-11) - feat: add image cropper component for photo upload optimization
 - `5216399` - feat: implement model purchase system with PIX payments
-- `3972e6e` - feat: add functional CRUD modals to all pages + new campaign creation page
-- `c4cf62c` - feat: add slider component for spam controls
-- Previous shadcn component additions
 
 ## Problems & Solutions
 
@@ -87,6 +89,91 @@
 **Files Modified:**
 - `src/app/(dashboard)/models/_components/photo-upload.tsx`
 - `src/server/trpc/routers/model.router.ts`
+
+### 2026-02-11 - Image Cropper Component
+
+**Problem:** Need to allow users to crop/optimize uploaded photos before saving to S3 (reduces storage, improves gallery appearance).
+
+**Root Cause:** Photos uploaded at full resolution may have poor framing or excessive file size.
+
+**Solution:** Created ImageCropper component that:
+1. Displays dialog with react-image-crop library
+2. Provides aspect ratio presets: free, 1:1, 4:3, 16:9, 9:16
+3. Allows reset to original image
+4. Generates cropped File object with JPEG compression (90% quality)
+5. Handles both file input and canvas rendering
+6. Falls back to original file if no crop selected
+
+**Usage Pattern:**
+```typescript
+const [cropperOpen, setCropperOpen] = useState(false);
+const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+const handleCropComplete = async (croppedFile: File) => {
+  // Upload croppedFile instead of original
+  await uploadToS3(croppedFile);
+};
+
+return (
+  <>
+    <input
+      type="file"
+      onChange={(e) => {
+        setSelectedFile(e.target.files?.[0] || null);
+        setCropperOpen(true);
+      }}
+    />
+    <ImageCropper
+      file={selectedFile}
+      open={cropperOpen}
+      onOpenChange={setCropperOpen}
+      onCropComplete={handleCropComplete}
+      aspectRatioPreset="9:16"
+    />
+  </>
+);
+```
+
+**Files Created/Modified:**
+- `src/components/shared/image-cropper.tsx` (NEW)
+- `src/app/(dashboard)/models/_components/photo-upload.tsx` (integrated cropper)
+- `src/app/(dashboard)/models/[id]/products/_components/product-photo-upload.tsx` (integrated cropper)
+
+**Key Points:**
+- Uses react-image-crop library (npm install react-image-crop)
+- Canvas-based crop for pixel-perfect results
+- JPEG quality 0.9 balances quality vs file size
+- Reset button clears selection and starts over
+- Dialog closes on confirm or cancel
+
+**Implementation Details:**
+```typescript
+// Key features:
+1. Aspect ratio presets: free, 1:1, 4:3, 16:9, 9:16
+2. Image loaded via FileReader (base64 data URL)
+3. Canvas-based cropping with scale calculation for natural image size
+4. Falls back to original file if no crop area selected
+5. Returns cropped File object ready for upload
+
+// Integration pattern:
+const [cropperOpen, setCropperOpen] = useState(false);
+const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+<ImageCropper
+  file={selectedFile}
+  open={cropperOpen}
+  onOpenChange={setCropperOpen}
+  onCropComplete={(croppedFile) => uploadToS3(croppedFile)}
+  aspectRatioPreset="9:16"
+/>
+```
+
+**Gotchas:**
+- Must import CSS: `import 'react-image-crop/dist/ReactCrop.css'`
+- Image state managed via useRef (imgRef) to avoid re-renders
+- Scale calculation needed to convert displayed pixels to natural image pixels
+- Canvas toBlob is async, wrapped in Promise for clean API
+- Reset clears both `crop` (UI selection) and `completedCrop` (final selection)
 
 ### 2026-02-07 - Product Manager Nested CRUD
 

@@ -1,9 +1,9 @@
 # Domain: Bot Purchase Flow (Telegram Model Content)
 
 ## Last Update
-- **Date:** 2026-02-10
-- **Commit:** 72dd834
-- **Summary:** Fixed QR code display (InputFile for base64/URL), unified gallery preview with inline buttons, implemented content delivery after payment, added Arkama webhook handler.
+- **Date:** 2026-02-11
+- **Commit:** 25f97e0
+- **Summary:** Completed subscription expiration system implementation with processor registration in worker service. Added scheduled jobs for 7-day warning, 1-day final warning, and automatic content deletion on expiry.
 
 ## Files
 
@@ -12,6 +12,10 @@
 
 ### Bot Entry Point
 - `services/bot/src/index.ts` - Bot setup with `/start` deep link support, command registration, and purchase handler integration
+
+### Worker Processors
+- `services/worker/src/index.ts` - Main worker service with subscription check job registration
+- `services/worker/src/processors/subscription.processor.ts` - Expiration notifications and message deletion
 
 ### Payment Service
 - `common/services/arkama.service.ts` - PIX payment integration with Arkama API and local fallback
@@ -29,6 +33,7 @@
 - **infrastructure** - Seed scripts, Docker services
 
 ## Recent Commits
+- (2026-02-11) - feat: implement subscription expiration system with automated notifications and content cleanup
 - 72dd834 - docs: document model purchase PIX payment feature
 - 2026-02-10 - feat: implement model purchase system with PIX payments (Arkama integration)
 
@@ -365,9 +370,176 @@ if (signature !== expectedSignature) {
 **Environment Variables:**
 - `ARKAMA_WEBHOOK_SECRET` - Secret for HMAC validation (must match Arkama dashboard config)
 
+### Subscription Expiration System (NEW - 2026-02-11)
+
+**Overview:**
+Automated system that notifies users before subscriptions expire and deletes content when expired.
+
+**Architecture:**
+```
+PurchaseModel (with accessExpiresAt, sentMessages, notification flags)
+    ↓
+BullMQ subscriptionCheckQueue
+    ↓
+Worker service (subscription.processor.ts)
+    ↓
+Three scheduled jobs:
+  1. Daily 9 AM: Check 7-day expirations → send notification
+  2. Daily 9 AM: Check 1-day expirations → send final warning
+  3. Every hour: Check expired → delete messages + update status
+```
+
+**Worker Jobs:**
+
+1. **check-expiring-7days** (Cron: `0 9 * * *` - daily at 9 AM)
+```typescript
+// Find: status='completed' AND type='subscription' AND accessExpiresAt in 7 days
+// Action: Send Telegram message, mark expirationNotified7Days=true
+// Rate limit: 100ms between messages
+```
+
+2. **check-expiring-1day** (Cron: `0 9 * * *` - daily at 9 AM)
+```typescript
+// Find: status='completed' AND type='subscription' AND accessExpiresAt in 24h
+// Action: Send final renewal warning, mark expirationNotified1Day=true
+// Rate limit: 100ms between messages
+```
+
+3. **process-expired** (Cron: `0 * * * *` - every hour)
+```typescript
+// Find: status='completed' AND type='subscription' AND accessExpiresAt <= now
+// Action:
+//   1. Delete all messages in sentMessages array from Telegram
+//   2. Update purchase status to 'expired'
+//   3. Clear sentMessages array for privacy
+// Rate limit: 50ms between deletes
+```
+
+**Message Deletion Flow:**
+
+```typescript
+// When content delivered to user
+purchase.sentMessages = [
+  { chatId: 123456789, messageIds: [1, 2, 3, 4] },  // Media group batch 1
+  { chatId: 123456789, messageIds: [5, 6] },        // Media group batch 2
+];
+await purchase.save();
+
+// On expiration
+for (const { chatId, messageIds } of purchase.sentMessages) {
+  for (const messageId of messageIds) {
+    try {
+      await api.deleteMessage(chatId, messageId);
+    } catch (err) {
+      // Message may already be deleted or chat deleted
+      logger.debug('Could not delete message', { chatId, messageId });
+    }
+  }
+}
+purchase.status = 'expired';
+purchase.sentMessages = [];  // Clear for privacy
+await purchase.save();
+```
+
+**Database Indexes for Performance:**
+```typescript
+purchaseSchema.index({ status: 1, accessExpiresAt: 1 });
+purchaseSchema.index({ status: 1, accessExpiresAt: 1, expirationNotified7Days: 1 });
+purchaseSchema.index({ status: 1, accessExpiresAt: 1, expirationNotified1Day: 1 });
+```
+
+**Rate Limiting Rationale:**
+- Message sends: 100ms between messages (Telegram's recommended limit)
+- Message deletes: 50ms between deletes (faster, less sensitive)
+- Prevents hitting Telegram API rate limits when processing many users
+
+**Testing Subscription Expiration:**
+
+1. Create subscription purchase with `accessExpiresAt` set to 8 days from now
+2. Run `process-expired` job → should find and log (not expired yet)
+3. Run `checkExpiringIn7Days` job → should send notification
+4. Verify `expirationNotified7Days: true` in database
+5. Change `accessExpiresAt` to 1 day from now
+6. Run `checkExpiringIn1Day` job → should send final warning
+7. Change `accessExpiresAt` to past date
+8. Run `process-expired` job → should delete messages, update status to 'expired'
+
+**Error Handling:**
+- Notification failures logged, job continues (doesn't block other users)
+- Message deletion failures logged but ignored (message may already be deleted)
+- Worker retries job 3 times with exponential backoff if it throws
+
 ### Known Limitations
 
 1. **Subscription Renewal** - Subscriptions don't auto-renew. Manual handling needed.
 2. **Batch Purchasing** - Can only buy one product per purchase flow. Multiple purchases require multiple flows.
 3. **Refunds** - Not implemented. ArkamaService doesn't have refund support yet.
 4. **Content Batch Size** - Telegram limits media groups to 10 items. Large packs split across multiple messages.
+5. **Message Persistence** - sentMessages only stored while subscription active. Cleared on expiration for privacy (can't view deletion history).
+
+## Problems & Solutions
+
+### 2026-02-11 - Subscription Processor Not Registered in Worker
+
+**Problem:** Subscription processor was defined in `subscription.processor.ts` but worker was throwing error "No processor found for queue subscription-check" when scheduled jobs triggered.
+
+**Root Cause:** Worker service (`services/worker/src/index.ts`) was missing the processor registration. The queue was configured in `common/queue/queues.ts` but no worker was listening to it.
+
+**Solution:** Added processor registration in worker index:
+```typescript
+import { processSubscriptionCheck } from './processors/subscription.processor';
+
+// Register subscription processor
+subscriptionCheckWorker = new Worker(
+  QUEUE_NAMES.SUBSCRIPTION_CHECK,
+  processSubscriptionCheck,
+  workerOptions
+);
+
+// Add repeatable jobs
+await subscriptionCheckQueue.add(
+  'check-expiring-7days',
+  { type: 'check-expiring-7days' },
+  { repeat: { pattern: '0 9 * * *' } }
+);
+// ... other jobs
+```
+
+**Prevention:** When creating new queues:
+1. Add queue to `common/queue/queues.ts`
+2. Create processor in `services/worker/src/processors/[name].processor.ts`
+3. MUST register processor in `services/worker/src/index.ts` with `new Worker()`
+4. Add repeatable jobs AFTER worker registration
+5. Test with manual job trigger before relying on cron schedule
+
+**Files Modified:**
+- `services/worker/src/index.ts`
+- `services/worker/src/processors/subscription.processor.ts`
+
+### 2026-02-11 - Worker Jobs Need Job Type Discriminator
+
+**Problem:** Single processor handling multiple job types (check-expiring-7days, check-expiring-1day, process-expired) needed way to route to correct handler function.
+
+**Root Cause:** BullMQ worker processors receive `Job<TData>` but the job name is only metadata, not part of job data.
+
+**Solution:** Used job data type discriminator pattern:
+```typescript
+interface SubscriptionJobData {
+  type: 'check-expiring-7days' | 'check-expiring-1day' | 'process-expired';
+}
+
+export async function processSubscriptionCheck(job: Job<SubscriptionJobData>) {
+  const { type } = job.data;
+  switch (type) {
+    case 'check-expiring-7days':
+      await checkExpiringIn7Days();
+      break;
+    // ... other cases
+  }
+}
+```
+
+**Prevention:** For workers with multiple job types, always include `type` field in job data for routing. Job names are for BullMQ UI/logs, not for code logic.
+
+**Files Modified:**
+- `services/worker/src/processors/subscription.processor.ts`

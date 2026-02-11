@@ -8,6 +8,7 @@ export const QUEUE_NAMES = {
   ANALYTICS_AGGREGATE: 'analytics-aggregate',
   CAMPAIGN_CHECK: 'campaign-check',
   BOT_TASKS: 'bot-tasks',
+  SUBSCRIPTION_CHECK: 'subscription-check',
 } as const;
 
 // Default queue options
@@ -71,6 +72,19 @@ export const botTasksQueue = new Queue(QUEUE_NAMES.BOT_TASKS, {
   },
 });
 
+// Subscription check queue (expiration notifications, message deletion)
+export const subscriptionCheckQueue = new Queue(QUEUE_NAMES.SUBSCRIPTION_CHECK, {
+  ...defaultQueueOptions,
+  defaultJobOptions: {
+    ...defaultQueueOptions.defaultJobOptions,
+    attempts: 3,
+    backoff: {
+      type: 'exponential',
+      delay: 5000,
+    },
+  },
+});
+
 // Factory function for per-group post queues
 const postQueues = new Map<string, Queue>();
 
@@ -108,6 +122,7 @@ export async function closeAllQueues(): Promise<void> {
   await analyticsQueue.close();
   await campaignCheckQueue.close();
   await botTasksQueue.close();
+  await subscriptionCheckQueue.close();
 
   for (const queue of postQueues.values()) {
     await queue.close();

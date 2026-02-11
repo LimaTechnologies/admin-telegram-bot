@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** feature/model-detail-pages
+**Branch:** feature/subscription-expiration-system
 **Date:** 2026-02-11
-**Summary:** Migrated model editing from modals to dedicated pages with dynamic routes. New structure: `/models/[id]` (info), `/models/[id]/photos`, `/models/[id]/products`, `/models/[id]/products/[productId]`. Added contentPhotos and previewImages upload for products. Removed old modal-based editing.
+**Summary:** Added image cropping to upload components (react-image-crop). Implemented full subscription expiration system: worker registration, repeatable jobs for 7-day/1-day notifications, automatic message deletion on expiration. Message tracking via sentMessages array in Purchase model.
 
 ---
 

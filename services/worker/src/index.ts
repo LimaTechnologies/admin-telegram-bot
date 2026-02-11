@@ -1,9 +1,10 @@
 import { Worker } from 'bullmq';
-import { connectDB, getRedisConnection, QUEUE_NAMES, logger } from '@common';
+import { connectDB, getRedisConnection, QUEUE_NAMES, subscriptionCheckQueue, logger } from '@common';
 import { processAuditLog } from './processors/audit.processor';
 import { processCampaignCheck } from './processors/campaign.processor';
 import { processAnalyticsAggregation } from './processors/analytics.processor';
 import { processBotTasks } from './processors/bot-tasks.processor';
+import { processSubscriptionCheck } from './processors/subscription.processor';
 
 async function main() {
   logger.info('Starting worker service...');
@@ -86,6 +87,57 @@ async function main() {
     logger.error('Bot task failed', err, { jobId: job?.id, type: job?.data?.type });
   });
 
+  // Subscription check worker (expiration notifications + message deletion)
+  const subscriptionWorker = new Worker(
+    QUEUE_NAMES.SUBSCRIPTION_CHECK,
+    processSubscriptionCheck,
+    {
+      connection,
+      concurrency: 2,
+    }
+  );
+
+  subscriptionWorker.on('completed', (job) => {
+    logger.debug('Subscription check completed', { jobId: job.id, type: job.data?.type });
+  });
+
+  subscriptionWorker.on('failed', (job, err) => {
+    logger.error('Subscription check failed', err, { jobId: job?.id, type: job?.data?.type });
+  });
+
+  // Schedule repeatable jobs for subscription checks
+  // Check for subscriptions expiring in 7 days (runs daily at 9:00 AM)
+  await subscriptionCheckQueue.add(
+    'check-expiring-7days',
+    { type: 'check-expiring-7days' },
+    {
+      repeat: { pattern: '0 9 * * *' }, // Every day at 9:00 AM
+      jobId: 'subscription-7days-check',
+    }
+  );
+
+  // Check for subscriptions expiring in 1 day (runs daily at 9:00 AM)
+  await subscriptionCheckQueue.add(
+    'check-expiring-1day',
+    { type: 'check-expiring-1day' },
+    {
+      repeat: { pattern: '0 9 * * *' }, // Every day at 9:00 AM
+      jobId: 'subscription-1day-check',
+    }
+  );
+
+  // Process expired subscriptions (runs every hour)
+  await subscriptionCheckQueue.add(
+    'process-expired',
+    { type: 'process-expired' },
+    {
+      repeat: { pattern: '0 * * * *' }, // Every hour
+      jobId: 'subscription-expired-check',
+    }
+  );
+
+  logger.info('Subscription check jobs scheduled');
+
   logger.info('Worker service started successfully');
 
   // Graceful shutdown
@@ -96,6 +148,7 @@ async function main() {
       campaignWorker.close(),
       analyticsWorker.close(),
       botTasksWorker.close(),
+      subscriptionWorker.close(),
     ]);
     process.exit(0);
   };

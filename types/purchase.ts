@@ -27,6 +27,12 @@ export interface UpdateModelProductInput extends Partial<CreateModelProductInput
   isActive?: boolean;
 }
 
+// Sent message tracking for subscription expiration
+export interface ISentMessage {
+  chatId: number;
+  messageIds: number[];
+}
+
 // Purchase - when a user buys a product
 export type PurchaseStatus = 'pending' | 'paid' | 'completed' | 'failed' | 'refunded' | 'expired';
 
@@ -59,6 +65,13 @@ export interface IPurchase {
   // Delivery
   deliveredAt?: Date;
   accessExpiresAt?: Date; // For subscriptions
+
+  // Sent messages (for deletion on expiration)
+  sentMessages?: ISentMessage[];
+
+  // Expiration notification tracking
+  expirationNotified7Days?: boolean;
+  expirationNotified1Day?: boolean;
 
   // Metadata
   notes?: string;

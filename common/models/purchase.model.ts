@@ -63,6 +63,24 @@ const purchaseSchema = new Schema<IPurchase>(
     deliveredAt: Date,
     accessExpiresAt: Date,
 
+    // Sent messages (for deletion on expiration)
+    sentMessages: [
+      {
+        chatId: { type: Number, required: true },
+        messageIds: [{ type: Number }],
+      },
+    ],
+
+    // Expiration notification tracking
+    expirationNotified7Days: {
+      type: Boolean,
+      default: false,
+    },
+    expirationNotified1Day: {
+      type: Boolean,
+      default: false,
+    },
+
     // Metadata
     notes: String,
   },
@@ -75,6 +93,10 @@ const purchaseSchema = new Schema<IPurchase>(
 purchaseSchema.index({ telegramUserId: 1, createdAt: -1 });
 purchaseSchema.index({ modelId: 1, status: 1 });
 purchaseSchema.index({ status: 1, createdAt: -1 });
+// For subscription expiration queries
+purchaseSchema.index({ status: 1, accessExpiresAt: 1 });
+purchaseSchema.index({ status: 1, accessExpiresAt: 1, expirationNotified7Days: 1 });
+purchaseSchema.index({ status: 1, accessExpiresAt: 1, expirationNotified1Day: 1 });
 
 export const PurchaseModel: Model<IPurchase> =
   models['Purchase'] || model<IPurchase>('Purchase', purchaseSchema);

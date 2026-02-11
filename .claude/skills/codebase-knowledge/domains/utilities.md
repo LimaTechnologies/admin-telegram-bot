@@ -1,11 +1,14 @@
 # Domain: Utilities (Shared Services & Helpers)
 
 ## Last Update
-- **Date:** 2026-02-10
-- **Commit:** (model purchase feature)
-- **Summary:** Added ArkamaService for PIX payment API integration with local fallback for testing.
+- **Date:** 2026-02-11
+- **Commit:** 25f97e0
+- **Summary:** Completed subscriptionCheckQueue configuration and worker registration. Queue handles 3 repeatable jobs: 7-day warning, 1-day warning, and hourly expiration processing.
 
 ## Files
+
+### Queue Configuration
+- `common/queue/queues.ts` - BullMQ queue setup (audit, analytics, campaign, bot tasks, subscription)
 
 ### Payment Services
 - `common/services/arkama.service.ts` - PIX payment integration (Arkama API + local fallback)
@@ -29,8 +32,57 @@
 - **pages** - Dashboard pages use storage service
 
 ## Recent Commits
+- 25f97e0 - feat: add clickable model name to open detail page
+- 4c4a76b - docs: update CLAUDE.md with model detail pages changes
+- (2026-02-11) - feat: add subscription check queue for expiration processing
+- (2026-02-11) - feat: register subscription processor in worker service
 - 2026-02-10 - feat: add arkama service for pix payments with local fallback
-- (Previous) - auth, email, storage services
+
+### Queue Configuration (2026-02-11)
+
+**Subscription Check Queue** - `common/queue/queues.ts`
+
+```typescript
+export const subscriptionCheckQueue = new Queue(QUEUE_NAMES.SUBSCRIPTION_CHECK, {
+  ...defaultQueueOptions,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 5000 },
+  },
+});
+```
+
+**Purpose:** Handles scheduled subscription expiration checks and cleanup.
+
+**Three Repeatable Jobs:**
+
+1. **check-expiring-7days** (daily at 9:00 AM)
+   - Finds subscriptions expiring within 7 days
+   - Sends Telegram notification to user
+   - Marks `expirationNotified7Days: true`
+   - Pattern: `0 9 * * *` (cron format)
+
+2. **check-expiring-1day** (daily at 9:00 AM)
+   - Finds subscriptions expiring within 1 day
+   - Sends final renewal warning to user
+   - Marks `expirationNotified1Day: true`
+   - Pattern: `0 9 * * *`
+
+3. **process-expired** (every hour)
+   - Finds completely expired subscriptions (accessExpiresAt <= now)
+   - Deletes all content messages from `sentMessages` array
+   - Updates purchase status to 'expired'
+   - Clears sentMessages for privacy
+   - Pattern: `0 * * * *` (hourly)
+
+**Queue Options:**
+- Concurrency: 2 (low to avoid Telegram rate limits)
+- Retry attempts: 3 with exponential backoff (5s initial)
+- Auto-cleanup: Remove completed jobs after 1000 count
+
+**Related Files:**
+- `services/worker/src/index.ts` - Worker registration
+- `services/worker/src/processors/subscription.processor.ts` - Processor logic
 
 ## Attention Points
 
@@ -281,3 +333,82 @@ export ARKAMA_API_URL='https://sandbox.arkama.com.br/api/v1'
 3. **QR Code Format** - Some Arkama responses use `qrCodeUrl`, others use embedded QR data.
 4. **Email Service** - Not documented in this file (separate domain).
 5. **Logger Levels** - Info is default, errors show context automatically.
+
+## Problems & Solutions
+
+### 2026-02-11 - Worker Registration for New Queue
+
+**Problem:** Created subscription check queue in `common/queue/queues.ts` but worker was not processing jobs.
+
+**Root Cause:** Queue configuration alone is not enough. Worker service must explicitly register a processor for the queue.
+
+**Solution:** Three-step worker setup:
+1. **Queue configuration** in `common/queue/queues.ts`:
+```typescript
+export const subscriptionCheckQueue = new Queue(QUEUE_NAMES.SUBSCRIPTION_CHECK, {
+  ...defaultQueueOptions,
+});
+```
+
+2. **Processor function** in `services/worker/src/processors/subscription.processor.ts`:
+```typescript
+export async function processSubscriptionCheck(job: Job<SubscriptionJobData>) {
+  // Handler logic
+}
+```
+
+3. **Worker registration** in `services/worker/src/index.ts`:
+```typescript
+subscriptionCheckWorker = new Worker(
+  QUEUE_NAMES.SUBSCRIPTION_CHECK,
+  processSubscriptionCheck,
+  workerOptions
+);
+
+// Add repeatable jobs AFTER worker registration
+await subscriptionCheckQueue.add('check-expiring-7days', { type: 'check-expiring-7days' }, {
+  repeat: { pattern: '0 9 * * *' },
+});
+```
+
+**Prevention:** When creating new BullMQ queues:
+- Define queue in common/queue/queues.ts
+- Create processor file in services/worker/src/processors/
+- Register worker in services/worker/src/index.ts
+- Add repeatable jobs after worker is registered
+- Test manually before relying on cron schedule
+
+**Files Modified:**
+- `common/queue/queues.ts`
+- `services/worker/src/index.ts`
+- `services/worker/src/processors/subscription.processor.ts`
+
+### 2026-02-11 - Rate Limiting Telegram API Calls
+
+**Problem:** Worker processing many subscriptions could hit Telegram API rate limits when sending notifications or deleting messages.
+
+**Root Cause:** Telegram bot API has rate limits: ~30 messages/second to different chats, ~20 messages/second to same chat.
+
+**Solution:** Added rate limiting delays between operations:
+```typescript
+// Between notification sends (100ms delay)
+for (const purchase of expiringPurchases) {
+  await api.sendMessage(purchase.telegramUserId, message);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+}
+
+// Between message deletes (50ms delay, less sensitive)
+for (const messageId of messageIds) {
+  await api.deleteMessage(chatId, messageId);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+}
+```
+
+**Prevention:**
+- For sends: 100ms between messages (safe for most use cases)
+- For deletes: 50ms between deletes (faster, less rate-limited)
+- For bulk operations (>100 users): Consider batching jobs or increasing delay
+- Monitor logs for "429 Too Many Requests" errors
+
+**Files Modified:**
+- `services/worker/src/processors/subscription.processor.ts`

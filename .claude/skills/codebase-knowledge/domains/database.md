@@ -1,9 +1,9 @@
 # Domain: Database (MongoDB + Mongoose)
 
 ## Last Update
-- **Date:** 2026-02-10
-- **Commit:** (model purchase feature)
-- **Summary:** Purchase, Transaction, TelegramUser models for PIX payment system. OFModel includes products array and preview photos.
+- **Date:** 2026-02-11
+- **Commit:** 25f97e0
+- **Summary:** Finalized subscription expiration tracking in PurchaseModel with accessExpiresAt, sentMessages array for message deletion, and notification flags. Indexes created for efficient worker queries.
 
 ## Files
 
@@ -37,10 +37,11 @@
 - **utilities** - Services use models for business logic
 
 ## Recent Commits
+- 25f97e0 - feat: add clickable model name to open detail page
+- 4c4a76b - docs: update CLAUDE.md with model detail pages changes
+- 48ae98e - feat: migrate model editing from modals to dedicated pages
+- (2026-02-11) - feat: add subscription expiration system with notifications
 - 72dd834 - docs: document model purchase PIX payment feature
-- 2026-02-10 - feat: implement model purchase system with PIX payments (Arkama)
-- `c4cf62c` - feat: add all missing dashboard pages
-- Initial model implementation
 
 ## Purchase Models (NEW - 2026-02-10)
 
@@ -115,7 +116,7 @@ products: [{
   price: number;
   currency: 'BRL' | 'USD';
   previewImages?: string[];   // Pack preview images
-  contentPhotos?: string[];   // NEW: Actual content delivered after purchase
+  contentPhotos?: string[];   // Actual content delivered after purchase
   isActive: boolean;
 }];
 ```
@@ -185,6 +186,43 @@ When debugging why entities appear/disappear in `getActive` queries:
   metadata: { ipAddress, userAgent, route, timestamp, duration, success }
 }
 ```
+
+### Subscription Expiration System (2026-02-11)
+
+**Fields Added to PurchaseModel:**
+```typescript
+{
+  accessExpiresAt: Date;                    // When subscription expires
+  sentMessages: [{ chatId, messageIds }];   // Track delivered content messages
+  expirationNotified7Days: boolean;         // 7-day warning sent flag
+  expirationNotified1Day: boolean;          // 1-day warning sent flag
+}
+```
+
+**Purpose:** Supports subscription lifecycle with automated notifications and content cleanup.
+
+**Indexes Added:**
+```typescript
+purchaseSchema.index({ status: 1, accessExpiresAt: 1 });
+purchaseSchema.index({ status: 1, accessExpiresAt: 1, expirationNotified7Days: 1 });
+purchaseSchema.index({ status: 1, accessExpiresAt: 1, expirationNotified1Day: 1 });
+```
+
+**Subscription Workflow:**
+1. User purchases subscription product (monthly/yearly, e.g., 30 days)
+2. `accessExpiresAt` set to purchase date + duration
+3. Worker job daily checks for subscriptions expiring in 7 days → sends notification, marks `expirationNotified7Days: true`
+4. Worker job daily checks for subscriptions expiring in 1 day → sends notification, marks `expirationNotified1Day: true`
+5. Worker job hourly checks for expired subscriptions (accessExpiresAt <= now):
+   - Deletes all messages in `sentMessages` (using Telegram API)
+   - Sets `status: 'expired'`
+   - Clears `sentMessages` for privacy
+
+**Key Points:**
+- Notifications tracked to avoid duplicate sends
+- Messages deleted automatically on expiration (content revoked)
+- sentMessages array populated when content delivered to user
+- Rate-limited message deletion (50ms between deletes) to avoid Telegram API throttling
 
 ### Product Content Photos (2026-02-10)
 
