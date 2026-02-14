@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** feature/subscription-expiration-system
-**Date:** 2026-02-11
-**Summary:** Added image cropping to upload components (react-image-crop). Implemented full subscription expiration system: worker registration, repeatable jobs for 7-day/1-day notifications, automatic message deletion on expiration. Message tracking via sentMessages array in Purchase model.
+**Branch:** feature/bulk-message-deletion
+**Date:** 2026-02-14
+**Summary:** Added bulk message deletion for Telegram channels/groups. Dashboard UI with "Manage Messages" and "Clear All Messages" actions. Uses Telegram's deleteMessages API for batch deletion (100 msgs/request). New tRPC endpoints: bulkDeleteMessages, clearAllMessages, getMessages.
 
 ---
 

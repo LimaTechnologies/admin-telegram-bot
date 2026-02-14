@@ -50,6 +50,8 @@ export type AuditAction =
   | 'group.syncAll'
   | 'group.testMessage'
   | 'group.deleteMessage'
+  | 'group.bulkDeleteMessages'
+  | 'group.clearAllMessages'
   | 'bot.sendMessage'
   | 'bot.deleteMessage'
   | 'bot.banUser'

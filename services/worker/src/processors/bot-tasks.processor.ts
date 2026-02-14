@@ -3,6 +3,7 @@ import { GrammyError, HttpError } from 'grammy';
 import {
   logger,
   TelegramGroup,
+  PostHistory,
   getBot,
   discoverAllGroups,
   syncGroupToDatabase,
@@ -14,6 +15,8 @@ import type {
   BotTaskJob,
   SendMessageJobData,
   DeleteMessageJobData,
+  DeleteMessagesBulkJobData,
+  ClearAllMessagesJobData,
   SyncGroupJobData,
   GroupSyncResult,
 } from '$types/telegram-group';
@@ -359,6 +362,12 @@ export async function processBotTasks(job: Job<BotTaskJob>): Promise<unknown> {
     case 'delete-message':
       return await processDeleteMessage(data as DeleteMessageJobData);
 
+    case 'delete-messages-bulk':
+      return await processDeleteMessagesBulk(data as DeleteMessagesBulkJobData);
+
+    case 'clear-all-messages':
+      return await processClearAllMessages(data as ClearAllMessagesJobData);
+
     case 'get-chat-info':
       return await processGetChatInfo(data as { chatId: string });
 
@@ -567,4 +576,352 @@ async function processCheckPermissions(data: { chatId: string }): Promise<{
  */
 async function rateLimitDelay(): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY_MS));
+}
+
+/**
+ * Delete multiple messages in bulk using Telegram's deleteMessages API
+ * This is more efficient - can delete up to 100 messages per API call
+ */
+async function processDeleteMessagesBulk(data: DeleteMessagesBulkJobData): Promise<{
+  success: boolean;
+  deleted: number;
+  failed: number;
+  errors: string[];
+}> {
+  if (!data.chatId || !data.messageIds || data.messageIds.length === 0) {
+    throw new Error('chatId and messageIds array are required');
+  }
+
+  const bot = await getBot();
+  let deleted = 0;
+  let failed = 0;
+  const errors: string[] = [];
+
+  logger.info('Starting bulk message deletion', {
+    chatId: data.chatId,
+    messageCount: data.messageIds.length,
+  });
+
+  // Telegram's deleteMessages can handle up to 100 messages at once
+  const BATCH_SIZE = 100;
+  const batches: number[][] = [];
+
+  for (let i = 0; i < data.messageIds.length; i += BATCH_SIZE) {
+    batches.push(data.messageIds.slice(i, i + BATCH_SIZE));
+  }
+
+  for (const batch of batches) {
+    await rateLimitDelay();
+
+    try {
+      // Try using deleteMessages (bulk) - available in Telegram Bot API 6.7+
+      // grammY supports this via bot.api.raw.deleteMessages
+      await bot.api.raw.deleteMessages({
+        chat_id: data.chatId,
+        message_ids: batch,
+      });
+
+      deleted += batch.length;
+
+      // Mark all as deleted in PostHistory
+      if (data.groupDbId) {
+        await PostHistory.updateMany(
+          {
+            groupId: data.groupDbId,
+            messageId: { $in: batch.map(String) },
+          },
+          { $set: { 'metrics.deletedAt': new Date() } }
+        );
+      }
+
+      logger.info('Deleted message batch', {
+        chatId: data.chatId,
+        batchSize: batch.length,
+      });
+    } catch (error) {
+      const errorInfo = classifyTelegramError(error);
+
+      // If bulk delete not supported or fails, fall back to individual deletion
+      if (errorInfo.errorType === 'BAD_REQUEST') {
+        logger.warn('Bulk delete failed, falling back to individual deletion', {
+          error: errorInfo.message,
+        });
+
+        // Fall back to individual deletion
+        for (const messageId of batch) {
+          await rateLimitDelay();
+
+          try {
+            await bot.api.deleteMessage(data.chatId, messageId);
+            deleted++;
+
+            if (data.groupDbId) {
+              await PostHistory.updateOne(
+                { groupId: data.groupDbId, messageId: String(messageId) },
+                { $set: { 'metrics.deletedAt': new Date() } }
+              );
+            }
+          } catch (individualError) {
+            const indErrorInfo = classifyTelegramError(individualError);
+
+            // Message already deleted is considered success
+            if (indErrorInfo.message.toLowerCase().includes('message to delete not found')) {
+              deleted++;
+              if (data.groupDbId) {
+                await PostHistory.updateOne(
+                  { groupId: data.groupDbId, messageId: String(messageId) },
+                  { $set: { 'metrics.deletedAt': new Date() } }
+                );
+              }
+              continue;
+            }
+
+            failed++;
+            errors.push(`Message ${messageId}: ${indErrorInfo.message}`);
+          }
+        }
+        continue;
+      }
+
+      // Rate limit - wait and retry the batch
+      if (errorInfo.isRecoverable && errorInfo.retryAfter) {
+        logger.warn('Rate limited during bulk delete, waiting', {
+          retryAfter: errorInfo.retryAfter,
+        });
+        await new Promise(resolve => setTimeout(resolve, errorInfo.retryAfter));
+
+        // Retry this batch
+        try {
+          await bot.api.raw.deleteMessages({
+            chat_id: data.chatId,
+            message_ids: batch,
+          });
+          deleted += batch.length;
+
+          if (data.groupDbId) {
+            await PostHistory.updateMany(
+              {
+                groupId: data.groupDbId,
+                messageId: { $in: batch.map(String) },
+              },
+              { $set: { 'metrics.deletedAt': new Date() } }
+            );
+          }
+          continue;
+        } catch {
+          // If still fails, count batch as failed
+          failed += batch.length;
+          errors.push(`Batch failed after retry: ${errorInfo.message}`);
+        }
+      } else {
+        failed += batch.length;
+        errors.push(`Batch failed: ${errorInfo.message}`);
+      }
+    }
+  }
+
+  logger.info('Bulk deletion completed', {
+    chatId: data.chatId,
+    deleted,
+    failed,
+    total: data.messageIds.length,
+  });
+
+  return { success: failed === 0, deleted, failed, errors };
+}
+
+/**
+ * Clear all messages from a channel/group
+ * Uses batch deletion for efficiency (up to 100 messages per API call)
+ */
+async function processClearAllMessages(data: ClearAllMessagesJobData): Promise<{
+  success: boolean;
+  deleted: number;
+  failed: number;
+  errors: string[];
+}> {
+  if (!data.chatId || !data.groupDbId) {
+    throw new Error('chatId and groupDbId are required');
+  }
+
+  const bot = await getBot();
+  let deleted = 0;
+  let failed = 0;
+  const errors: string[] = [];
+
+  logger.info('Starting clear all messages', {
+    chatId: data.chatId,
+    groupDbId: data.groupDbId,
+    fromMessageId: data.fromMessageId,
+    toMessageId: data.toMessageId,
+  });
+
+  // Get the group to find the last known message ID
+  const group = await TelegramGroup.findById(data.groupDbId);
+  if (!group) {
+    throw new Error('Group not found in database');
+  }
+
+  // Strategy 1: Delete messages from PostHistory (tracked messages) using batch deletion
+  const historyQuery: Record<string, unknown> = {
+    groupId: data.groupDbId,
+    'metrics.deletedAt': { $exists: false },
+  };
+
+  if (data.olderThanDays) {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - data.olderThanDays);
+    historyQuery['sentAt'] = { $lt: cutoffDate };
+  }
+
+  const trackedMessages = await PostHistory.find(historyQuery)
+    .select('messageId _id')
+    .lean();
+
+  logger.info('Found tracked messages to delete', {
+    count: trackedMessages.length,
+  });
+
+  // Batch delete tracked messages (100 at a time)
+  const BATCH_SIZE = 100;
+  for (let i = 0; i < trackedMessages.length; i += BATCH_SIZE) {
+    const batch = trackedMessages.slice(i, i + BATCH_SIZE);
+    const messageIds = batch.map(m => parseInt(m.messageId, 10));
+    const docIds = batch.map(m => m._id);
+
+    await rateLimitDelay();
+
+    try {
+      // Try bulk delete first
+      await bot.api.raw.deleteMessages({
+        chat_id: data.chatId,
+        message_ids: messageIds,
+      });
+
+      deleted += batch.length;
+
+      // Mark all as deleted
+      await PostHistory.updateMany(
+        { _id: { $in: docIds } },
+        { $set: { 'metrics.deletedAt': new Date() } }
+      );
+
+      logger.info('Deleted tracked message batch', { batchSize: batch.length });
+    } catch (error) {
+      const errorInfo = classifyTelegramError(error);
+
+      // Fall back to individual deletion if bulk fails
+      logger.warn('Bulk delete failed, falling back to individual', {
+        error: errorInfo.message,
+      });
+
+      for (const msg of batch) {
+        await rateLimitDelay();
+        const messageId = parseInt(msg.messageId, 10);
+
+        try {
+          await bot.api.deleteMessage(data.chatId, messageId);
+          deleted++;
+          await PostHistory.updateOne(
+            { _id: msg._id },
+            { $set: { 'metrics.deletedAt': new Date() } }
+          );
+        } catch (indError) {
+          const indErrorInfo = classifyTelegramError(indError);
+
+          if (indErrorInfo.message.toLowerCase().includes('message to delete not found')) {
+            deleted++;
+            await PostHistory.updateOne(
+              { _id: msg._id },
+              { $set: { 'metrics.deletedAt': new Date() } }
+            );
+            continue;
+          }
+
+          failed++;
+          errors.push(`Message ${msg.messageId}: ${indErrorInfo.message}`);
+        }
+      }
+    }
+  }
+
+  // Strategy 2: If range specified, try to delete messages in that range using batches
+  if (data.fromMessageId && data.toMessageId) {
+    logger.info('Attempting range deletion', {
+      from: data.fromMessageId,
+      to: data.toMessageId,
+    });
+
+    // Build batches of message IDs for range deletion
+    const rangeIds: number[] = [];
+    for (let msgId = data.toMessageId; msgId >= data.fromMessageId; msgId--) {
+      rangeIds.push(msgId);
+    }
+
+    for (let i = 0; i < rangeIds.length; i += BATCH_SIZE) {
+      const batch = rangeIds.slice(i, i + BATCH_SIZE);
+
+      await rateLimitDelay();
+
+      try {
+        await bot.api.raw.deleteMessages({
+          chat_id: data.chatId,
+          message_ids: batch,
+        });
+        deleted += batch.length;
+      } catch (error) {
+        const errorInfo = classifyTelegramError(error);
+
+        // Permission denied - stop trying range deletion
+        if (errorInfo.errorType === 'PERMISSION_DENIED') {
+          logger.warn('Permission denied for range deletion, stopping', {
+            chatId: data.chatId,
+          });
+          errors.push('Permission denied for range deletion');
+          break;
+        }
+
+        // Handle rate limits
+        if (errorInfo.isRecoverable && errorInfo.retryAfter) {
+          await new Promise(resolve => setTimeout(resolve, errorInfo.retryAfter));
+          try {
+            await bot.api.raw.deleteMessages({
+              chat_id: data.chatId,
+              message_ids: batch,
+            });
+            deleted += batch.length;
+          } catch {
+            // If bulk fails, try individual
+            for (const msgId of batch) {
+              try {
+                await bot.api.deleteMessage(data.chatId, msgId);
+                deleted++;
+              } catch {
+                // Ignore individual failures in range deletion
+              }
+            }
+          }
+          continue;
+        }
+
+        // For other errors, try individual deletion
+        for (const msgId of batch) {
+          try {
+            await bot.api.deleteMessage(data.chatId, msgId);
+            deleted++;
+          } catch {
+            // Ignore - message might not exist
+          }
+        }
+      }
+    }
+  }
+
+  logger.info('Clear all messages completed', {
+    chatId: data.chatId,
+    deleted,
+    failed,
+  });
+
+  return { success: failed === 0 || deleted > 0, deleted, failed, errors };
 }

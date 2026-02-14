@@ -82,7 +82,7 @@ export interface GroupSyncResult {
 }
 
 export interface BotTaskJob {
-  type: 'sync-groups' | 'sync-single-group' | 'send-message' | 'delete-message' | 'get-chat-info' | 'check-permissions';
+  type: 'sync-groups' | 'sync-single-group' | 'send-message' | 'delete-message' | 'delete-messages-bulk' | 'clear-all-messages' | 'get-chat-info' | 'check-permissions';
   data: Record<string, unknown>;
 }
 
@@ -98,6 +98,20 @@ export interface SendMessageJobData {
 export interface DeleteMessageJobData {
   chatId: string;
   messageId: number;
+}
+
+export interface DeleteMessagesBulkJobData {
+  chatId: string;
+  messageIds: number[];
+  groupDbId?: string; // MongoDB _id for updating PostHistory
+}
+
+export interface ClearAllMessagesJobData {
+  chatId: string;
+  groupDbId: string; // MongoDB _id for querying PostHistory
+  fromMessageId?: number; // Start from this message ID (for range deletion)
+  toMessageId?: number; // End at this message ID
+  olderThanDays?: number; // Delete messages older than X days
 }
 
 export interface SyncGroupJobData {

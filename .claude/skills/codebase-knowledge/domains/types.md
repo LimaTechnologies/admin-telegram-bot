@@ -1,14 +1,20 @@
 # Domain: TypeScript Type Definitions
 
 ## Last Update
-- **Date:** 2026-02-11
-- **Commit:** (subscription expiration system)
-- **Summary:** Added ISentMessage interface for tracking sent subscription content messages for deletion on expiration.
+- **Date:** 2026-02-14
+- **Commit:** a923cae
+- **Summary:** Added DeleteMessagesBulkJobData and ClearAllMessagesJobData types for bulk message deletion feature
 
 ## Files
 
 ### Purchase Types
 - `types/purchase.ts` - Purchase, Transaction, TelegramUser interfaces and input types
+
+### Telegram Group Types
+- `types/telegram-group.ts` - Group, BotPermissions, and message operation job data (DeleteMessagesBulkJobData, ClearAllMessagesJobData)
+
+### Audit Log Types
+- `types/audit-log.ts` - AuditAction enum including message deletion actions
 
 ## Connections
 - **database** - Mongoose models implement these interfaces
@@ -16,9 +22,89 @@
 - **bot-purchase** - Bot handlers use these types for purchase flow
 
 ## Recent Commits
+- a923cae - feat: add subscription expiration system and image cropper (includes bulk deletion types)
 - (2026-02-11) - feat: add ISentMessage interface for subscription content tracking
 - 2026-02-10 - feat: add purchase, transaction, telegram user types for PIX payment system
 - Initial type definitions
+
+## Telegram Group Message Operations (2026-02-14)
+
+### DeleteMessagesBulkJobData
+
+```typescript
+export interface DeleteMessagesBulkJobData {
+  chatId: string;           // Telegram chat ID
+  messageIds: number[];     // Array of message IDs to delete
+  groupDbId?: string;       // MongoDB _id for updating PostHistory records
+}
+```
+
+**Purpose:** Specifies a set of specific message IDs to delete from a Telegram group.
+
+**Usage in Workflow:**
+1. UI gets list of PostHistory records via `group.getMessages`
+2. User selects which messages to delete
+3. `group.bulkDeleteMessages` called with selected message IDs
+4. BullMQ job created with type `delete-messages-bulk`
+5. Worker processor iterates and deletes each message
+6. Updates corresponding PostHistory records: `status: 'deleted'`
+
+### ClearAllMessagesJobData
+
+```typescript
+export interface ClearAllMessagesJobData {
+  chatId: string;              // Telegram chat ID
+  groupDbId: string;           // MongoDB _id for querying PostHistory
+  fromMessageId?: number;      // Optional: start from this message ID (range deletion)
+  toMessageId?: number;        // Optional: end at this message ID
+  olderThanDays?: number;      // Optional: delete messages older than X days
+}
+```
+
+**Purpose:** Specifies criteria for bulk deleting messages from a Telegram group (without explicit message ID list).
+
+**Usage in Workflow:**
+1. UI shows dialog to clear all messages with optional filters
+2. User selects filter criteria (date range, age threshold)
+3. `group.clearAllMessages` called with filter options
+4. BullMQ job created with type `clear-all-messages`
+5. Worker queries PostHistory to find matching message IDs
+6. Deletes all matching messages
+7. Updates PostHistory records: `status: 'deleted'`
+
+**Filter Examples:**
+```typescript
+// Delete all messages from group
+{ chatId, groupDbId }
+
+// Delete messages from last 7 days
+{ chatId, groupDbId, olderThanDays: 7 }
+
+// Delete messages in ID range
+{ chatId, groupDbId, fromMessageId: 100, toMessageId: 500 }
+
+// Delete old messages (older than 30 days)
+{ chatId, groupDbId, olderThanDays: 30 }
+```
+
+**Audit Actions:**
+- `bulkDeleteMessages` → audit action `'group.bulkDeleteMessages'`
+- `clearAllMessages` → audit action `'group.clearAllMessages'`
+
+### BotTaskJob Update
+
+```typescript
+export interface BotTaskJob {
+  type: 'sync-groups' | 'sync-single-group' | 'send-message'
+       | 'delete-message' | 'delete-messages-bulk' | 'clear-all-messages'
+       | 'get-chat-info' | 'check-permissions';
+  data: Record<string, unknown>;
+}
+```
+
+**New job types:**
+- `delete-messages-bulk` - Handles DeleteMessagesBulkJobData
+- `clear-all-messages` - Handles ClearAllMessagesJobData
 
 ## Type Definitions (2026-02-11)
 

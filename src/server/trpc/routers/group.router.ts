@@ -419,4 +419,151 @@ export const groupRouter = router({
         message: `Refreshing stats for ${group.name}`,
       };
     }),
+
+  // Bulk delete messages from group
+  bulkDeleteMessages: operatorProcedure
+    .input(
+      z.object({
+        groupId: z.string(),
+        messageIds: z.array(z.number()).min(1).max(1000),
+      })
+    )
+    .use(
+      withAudit({
+        action: 'group.bulkDeleteMessages',
+        entityType: 'group',
+        getEntityId: (input) => (input as { groupId: string }).groupId,
+      })
+    )
+    .mutation(async ({ input }) => {
+      const group = await TelegramGroup.findById(input.groupId);
+      if (!group) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Group not found' });
+      }
+
+      // Check if bot has delete permission
+      if (!group.botPermissions?.canDeleteMessages) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Bot does not have permission to delete messages in this group',
+        });
+      }
+
+      const job = await botTasksQueue.add(
+        'delete-messages-bulk',
+        {
+          type: 'delete-messages-bulk',
+          data: {
+            chatId: group.telegramId,
+            messageIds: input.messageIds,
+            groupDbId: input.groupId,
+          },
+        } as BotTaskJob,
+        { priority: 2 }
+      );
+
+      return {
+        jobId: job.id,
+        message: `Bulk delete queued: ${input.messageIds.length} messages`,
+        messageCount: input.messageIds.length,
+      };
+    }),
+
+  // Clear all messages from group (admin operation)
+  clearAllMessages: operatorProcedure
+    .input(
+      z.object({
+        groupId: z.string(),
+        fromMessageId: z.number().optional(),
+        toMessageId: z.number().optional(),
+        olderThanDays: z.number().min(1).max(365).optional(),
+      })
+    )
+    .use(
+      withAudit({
+        action: 'group.clearAllMessages',
+        entityType: 'group',
+        getEntityId: (input) => (input as { groupId: string }).groupId,
+      })
+    )
+    .mutation(async ({ input }) => {
+      const group = await TelegramGroup.findById(input.groupId);
+      if (!group) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Group not found' });
+      }
+
+      // Check if bot has delete permission
+      if (!group.botPermissions?.canDeleteMessages) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Bot does not have permission to delete messages in this group',
+        });
+      }
+
+      // For range deletion, use lastMessageId if toMessageId not specified
+      const toMessageId = input.toMessageId || group.lastMessageId;
+
+      const job = await botTasksQueue.add(
+        'clear-all-messages',
+        {
+          type: 'clear-all-messages',
+          data: {
+            chatId: group.telegramId,
+            groupDbId: input.groupId,
+            fromMessageId: input.fromMessageId,
+            toMessageId,
+            olderThanDays: input.olderThanDays,
+          },
+        } as BotTaskJob,
+        { priority: 3 } // Lower priority for heavy operation
+      );
+
+      return {
+        jobId: job.id,
+        message: `Clear all messages queued for ${group.name}`,
+        fromMessageId: input.fromMessageId,
+        toMessageId,
+      };
+    }),
+
+  // Get messages sent to this group (for selection/deletion)
+  getMessages: protectedProcedure
+    .input(
+      z.object({
+        groupId: z.string(),
+        page: z.number().min(1).default(1),
+        limit: z.number().min(1).max(100).default(50),
+        includeDeleted: z.boolean().default(false),
+      })
+    )
+    .query(async ({ input }) => {
+      const { PostHistory } = await import('@common');
+
+      const filter: Record<string, unknown> = {
+        groupId: input.groupId,
+      };
+
+      if (!input.includeDeleted) {
+        filter['metrics.deletedAt'] = { $exists: false };
+      }
+
+      const [messages, total] = await Promise.all([
+        PostHistory.find(filter)
+          .sort({ sentAt: -1 })
+          .skip((input.page - 1) * input.limit)
+          .limit(input.limit)
+          .populate('campaignId', 'name')
+          .populate('creativeId', 'name')
+          .lean(),
+        PostHistory.countDocuments(filter),
+      ]);
+
+      return {
+        data: messages,
+        total,
+        page: input.page,
+        limit: input.limit,
+        totalPages: Math.ceil(total / input.limit),
+      };
+    }),
 });

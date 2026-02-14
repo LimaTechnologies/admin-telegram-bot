@@ -18,7 +18,7 @@
 ### Routers (14 total)
 - `auth.router.ts` - Authentication (login, verify, logout, getSession)
 - `user.router.ts` - User CRUD (admin only)
-- `group.router.ts` - Telegram group management + create mutation
+- `group.router.ts` - Telegram group management (getActive, list, create, update, delete, testMessage, deleteMessage, bulkDeleteMessages, clearAllMessages, getMessages)
 - `campaign.router.ts` - Campaign CRUD with auditing + create mutation
 - `creative.router.ts` - Creative assets management + create mutation
 - `model.router.ts` - OnlyFans model management + photo upload + products
@@ -28,7 +28,7 @@
 - `audit.router.ts` - Audit log viewing (admin only)
 - `analytics.router.ts` - Performance metrics
 - `scheduledPost.router.ts` - Scheduled post CRUD (list, getById, create, update, delete, getStats)
-- `purchase.router.ts` - NEW: Purchase tracking and management (list, getById, getStats, getByTelegramUser)
+- `purchase.router.ts` - Purchase tracking and management (list, getById, getStats, getByTelegramUser)
 
 ### Middleware
 - `src/server/trpc/middleware/audit.middleware.ts` - Auto-logs all mutations
@@ -43,6 +43,8 @@
 - **pages** - All dashboard pages consume tRPC queries/mutations
 
 ## Recent Commits
+- a923cae - feat: add subscription expiration system and image cropper
+- 25f97e0 - feat: add clickable model name to open detail page
 - 72dd834 - docs: document model purchase PIX payment feature (webhook added)
 - `5216399` - feat: implement model purchase system with PIX payments
 - `3972e6e` - feat: add scheduledPost router + CRUD mutations for campaign/creative/group routers
@@ -155,6 +157,51 @@ export const groupRouter = t.router({
 
 **Files Modified:**
 - `src/server/trpc/routers/model.router.ts`
+
+#### 2026-02-14 - Bulk Message Deletion Feature
+
+**Problem:** Dashboard needed ability to bulk delete Telegram messages from groups and clear all messages for subscription expiration workflow.
+
+**Root Cause:** No existing endpoints for bulk deletion operations, needed both targeted deletion (specific messages) and clearing all messages from a group.
+
+**Solution:** Added three new procedures to group.router:
+
+1. **bulkDeleteMessages** - Deletes specific message IDs from a group
+   - Input: `{ groupDbId, messageIds: number[] }`
+   - Creates async job: `delete-messages-bulk`
+   - Updates PostHistory records to `status: 'deleted'`
+   - Tracks in audit log: `group.bulkDeleteMessages`
+   - Dialog UI shows progress with spinner during deletion
+
+2. **clearAllMessages** - Deletes all messages posted via dashboard from a group
+   - Input: `{ groupDbId, fromMessageId?, toMessageId?, olderThanDays? }`
+   - Creates async job: `clear-all-messages`
+   - Filters PostHistory by date range
+   - Deletes messages in batches with rate limiting (50ms between calls)
+   - Updates PostHistory records to `status: 'deleted'`
+   - Tracks in audit log: `group.clearAllMessages`
+   - Dialog UI with confirmation shows estimated message count before deletion
+
+3. **getMessages** - Lists posted messages for a group (UI display)
+   - Input: `{ groupDbId, limit?, offset? }`
+   - Returns PostHistory with campaign/creative details
+   - Used to populate message list UI for selection
+
+**Implementation Details:**
+- Queue jobs use BullMQ with retry logic
+- Telegram API rate limiting: max 50ms between deletes to avoid 429 errors
+- Failed deletes logged but don't block other messages
+- PostHistory records kept (marked deleted) for audit trail
+- Group's lastMessageId not updated on deletion (historical reference)
+
+**Prevention:** For bulk operations on Telegram, always implement rate limiting in worker processors to respect API limits.
+
+**Files Modified:**
+- `src/server/trpc/routers/group.router.ts` - Added 3 procedures + audit middleware
+- `services/worker/src/processors/bot-tasks.processor.ts` - Added processDeleteMessagesBulk + processClearAllMessages handlers
+- `src/app/(dashboard)/groups/page.tsx` - Added message management UI with dialogs
+- `types/telegram-group.ts` - Added DeleteMessagesBulkJobData and ClearAllMessagesJobData types
+- `types/audit-log.ts` - Added 'group.bulkDeleteMessages' and 'group.clearAllMessages' actions
 
 #### 2026-02-07 - Purchase Router Design
 

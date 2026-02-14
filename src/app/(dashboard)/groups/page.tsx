@@ -15,6 +15,9 @@ import {
   Clock,
   Zap,
   Plus,
+  MessageSquare,
+  AlertTriangle,
+  Eraser,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc/client';
 import { DataTable } from '@/components/shared/data-table';
@@ -84,6 +87,10 @@ export default function GroupsPage() {
   const [newGroupId, setNewGroupId] = useState('');
   const [editGroupOpen, setEditGroupOpen] = useState(false);
   const [editGroup, setEditGroup] = useState<EditGroupState | null>(null);
+  const [messagesOpen, setMessagesOpen] = useState(false);
+  const [clearAllOpen, setClearAllOpen] = useState(false);
+  const [messagesPage, setMessagesPage] = useState(1);
+  const [selectedMessages, setSelectedMessages] = useState<number[]>([]);
 
   const utils = trpc.useUtils();
 
@@ -177,6 +184,35 @@ export default function GroupsPage() {
       setEditGroupOpen(false);
       setEditGroup(null);
       invalidateGroupQueries();
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
+  // Messages queries and mutations
+  const { data: messagesData, isLoading: isLoadingMessages, refetch: refetchMessages } =
+    trpc.group.getMessages.useQuery(
+      { groupId: selectedGroup?.id || '', page: messagesPage, limit: 20 },
+      { enabled: messagesOpen && !!selectedGroup?.id }
+    );
+
+  const bulkDeleteMessages = trpc.group.bulkDeleteMessages.useMutation({
+    onSuccess: (data) => {
+      toast.success(data.message);
+      setSelectedMessages([]);
+      refetchMessages();
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const clearAllMessages = trpc.group.clearAllMessages.useMutation({
+    onSuccess: (data) => {
+      toast.success(data.message);
+      setClearAllOpen(false);
+      refetchMessages();
     },
     onError: (error) => {
       toast.error(error.message);
@@ -385,7 +421,38 @@ export default function GroupsPage() {
               <Settings className="mr-2 h-4 w-4" />
               Edit Settings
             </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                setSelectedGroup({
+                  id: row._id,
+                  name: row.name,
+                  telegramId: row.telegramId,
+                });
+                setSelectedMessages([]);
+                setMessagesPage(1);
+                setMessagesOpen(true);
+              }}
+              disabled={!row.botPermissions?.canDeleteMessages}
+            >
+              <MessageSquare className="mr-2 h-4 w-4" />
+              Manage Messages
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="text-orange-500"
+              onClick={() => {
+                setSelectedGroup({
+                  id: row._id,
+                  name: row.name,
+                  telegramId: row.telegramId,
+                });
+                setClearAllOpen(true);
+              }}
+              disabled={!row.botPermissions?.canDeleteMessages}
+            >
+              <Eraser className="mr-2 h-4 w-4" />
+              Clear All Messages
+            </DropdownMenuItem>
             <DropdownMenuItem
               className="text-destructive"
               onClick={() => {
@@ -780,6 +847,221 @@ export default function GroupsPage() {
               disabled={updateGroup.isPending}
             >
               {updateGroup.isPending ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manage Messages Dialog */}
+      <Dialog open={messagesOpen} onOpenChange={setMessagesOpen}>
+        <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Manage Messages</DialogTitle>
+            <DialogDescription>
+              View and delete messages sent to {selectedGroup?.name}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto space-y-4 py-4">
+            {/* Action buttons */}
+            <div className="flex justify-between items-center">
+              <div className="text-sm text-muted-foreground">
+                {selectedMessages.length > 0 && (
+                  <span>{selectedMessages.length} selected</span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                {selectedMessages.length > 0 && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => {
+                      if (selectedGroup && selectedMessages.length > 0) {
+                        bulkDeleteMessages.mutate({
+                          groupId: selectedGroup.id,
+                          messageIds: selectedMessages,
+                        });
+                      }
+                    }}
+                    disabled={bulkDeleteMessages.isPending}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    {bulkDeleteMessages.isPending
+                      ? 'Deleting...'
+                      : `Delete ${selectedMessages.length}`}
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => refetchMessages()}
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Refresh
+                </Button>
+              </div>
+            </div>
+
+            {/* Messages list */}
+            {isLoadingMessages ? (
+              <div className="text-center py-8 text-muted-foreground">
+                Loading messages...
+              </div>
+            ) : messagesData?.data && messagesData.data.length > 0 ? (
+              <div className="space-y-2">
+                {/* Select all */}
+                <div className="flex items-center gap-2 pb-2 border-b">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-gray-300"
+                    checked={
+                      messagesData.data.length > 0 &&
+                      selectedMessages.length === messagesData.data.length
+                    }
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedMessages(
+                          messagesData.data.map((m) => parseInt(m.messageId, 10))
+                        );
+                      } else {
+                        setSelectedMessages([]);
+                      }
+                    }}
+                  />
+                  <span className="text-sm text-muted-foreground">Select all</span>
+                </div>
+
+                {messagesData.data.map((msg) => {
+                  const messageId = parseInt(msg.messageId, 10);
+                  const isSelected = selectedMessages.includes(messageId);
+                  return (
+                    <div
+                      key={msg._id?.toString()}
+                      className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                        isSelected ? 'bg-primary/10 border-primary/50' : 'bg-card hover:bg-accent/50'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-gray-300"
+                        checked={isSelected}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedMessages([...selectedMessages, messageId]);
+                          } else {
+                            setSelectedMessages(
+                              selectedMessages.filter((id) => id !== messageId)
+                            );
+                          }
+                        }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm">#{msg.messageId}</span>
+                          {msg.campaignId && typeof msg.campaignId === 'object' && 'name' in msg.campaignId && (
+                            <Badge variant="outline" className="text-xs">
+                              {(msg.campaignId as { name: string }).name}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Sent: {formatDate(msg.sentAt)}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <span>{msg.metrics?.views || 0} views</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                No messages found for this group
+              </div>
+            )}
+
+            {/* Pagination */}
+            {messagesData && messagesData.totalPages > 1 && (
+              <div className="flex justify-center gap-2 pt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setMessagesPage((p) => Math.max(1, p - 1))}
+                  disabled={messagesPage === 1}
+                >
+                  Previous
+                </Button>
+                <span className="flex items-center px-4 text-sm text-muted-foreground">
+                  Page {messagesPage} of {messagesData.totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setMessagesPage((p) => Math.min(messagesData.totalPages, p + 1))
+                  }
+                  disabled={messagesPage === messagesData.totalPages}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMessagesOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Clear All Messages Confirmation Dialog */}
+      <Dialog open={clearAllOpen} onOpenChange={setClearAllOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-500">
+              <AlertTriangle className="h-5 w-5" />
+              Clear All Messages
+            </DialogTitle>
+            <DialogDescription>
+              This will delete ALL tracked messages from {selectedGroup?.name}.
+              This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="rounded-lg border border-orange-500/50 bg-orange-500/10 p-4">
+              <p className="text-sm">
+                <strong>Warning:</strong> This will attempt to delete all messages
+                that were sent by the bot and tracked in the system. Messages sent
+                by other users will not be affected.
+              </p>
+            </div>
+            <div className="text-sm text-muted-foreground">
+              <p>
+                <strong>Group:</strong> {selectedGroup?.name}
+              </p>
+              <p>
+                <strong>Telegram ID:</strong> {selectedGroup?.telegramId}
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setClearAllOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (selectedGroup) {
+                  clearAllMessages.mutate({ groupId: selectedGroup.id });
+                }
+              }}
+              disabled={clearAllMessages.isPending}
+            >
+              <Eraser className="mr-2 h-4 w-4" />
+              {clearAllMessages.isPending ? 'Clearing...' : 'Clear All Messages'}
             </Button>
           </DialogFooter>
         </DialogContent>

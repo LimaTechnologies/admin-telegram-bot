@@ -1,9 +1,9 @@
 # Domain: Dashboard Pages
 
 ## Last Update
-- **Date:** 2026-02-10
-- **Commit:** 72dd834
-- **Summary:** Added "Telegram Purchases" report type to reports page for bot purchase analytics
+- **Date:** 2026-02-14
+- **Commit:** a923cae
+- **Summary:** Added message management UI to groups page with bulk deletion and clear all dialogs
 
 ## Files
 
@@ -13,9 +13,9 @@
 
 ### Dashboard Pages (13 total)
 - `src/app/(dashboard)/page.tsx` - Overview with KPIs
-- `src/app/(dashboard)/groups/page.tsx` - Telegram groups management (functional Add modal)
+- `src/app/(dashboard)/groups/page.tsx` - Telegram groups management + message management (Add modal, Bulk Delete dialog, Clear All dialog)
 - `src/app/(dashboard)/campaigns/page.tsx` - Campaign CRUD
-- `src/app/(dashboard)/campaigns/new/page.tsx` - NEW: Full campaign creation form
+- `src/app/(dashboard)/campaigns/new/page.tsx` - Full campaign creation form
 - `src/app/(dashboard)/creatives/page.tsx` - Creative library (functional Add modal)
 - `src/app/(dashboard)/scheduling/page.tsx` - Calendar + rotation (functional Schedule modal)
 - `src/app/(dashboard)/revenue/page.tsx` - Deals + revenue tracking (functional New Deal modal)
@@ -37,6 +37,8 @@
 - **authentication** - Dashboard layout checks session
 
 ## Recent Commits
+- a923cae - feat: add subscription expiration system and image cropper (groups message management UI)
+- 25f97e0 - feat: add clickable model name to open detail page
 - 72dd834 - docs: document model purchase PIX payment feature
 - `3972e6e` - feat: add functional CRUD modals to all pages + new campaign creation page
 - `c4cf62c` - feat: add all missing dashboard pages
@@ -207,3 +209,44 @@ Added "Telegram Purchases" report type to `/reports` page:
 
 **Files Modified:**
 - `src/app/(dashboard)/reports/page.tsx`
+
+### Groups Page - Message Management (2026-02-14)
+
+Enhanced groups page with message management features for subscription cleanup workflow.
+
+**New UI Components:**
+1. **Message List Dialog** - Shows all posted messages in a group
+   - Displays PostHistory records with campaign/creative info
+   - Shows message date, status, performance metrics
+   - Selectable checkboxes for bulk deletion
+   - Opens via "Manage Messages" action button
+
+2. **Bulk Delete Dialog** - Delete specific selected messages
+   - Shows list of selected message IDs
+   - Confirmation before deletion
+   - Progress spinner during deletion
+   - Updates UI on completion (refetches message list)
+   - Audit log: `group.bulkDeleteMessages`
+
+3. **Clear All Messages Dialog** - Delete all messages from group
+   - Shows estimated count of messages to delete
+   - Optional filter options:
+     - Delete messages older than X days
+     - Delete messages in date range
+   - Confirmation before deletion
+   - Progress spinner during clearing
+   - Audit log: `group.clearAllMessages`
+
+**Integration with Group Row:**
+- New "Manage Messages" button in group actions dropdown
+- Opens message list for selected group
+- Displays message count badge
+- Updates after each deletion operation
+
+**Backend Endpoints Used:**
+- `group.getMessages` - Fetch PostHistory for display
+- `group.bulkDeleteMessages` - Delete specific messages
+- `group.clearAllMessages` - Clear all messages with filters
+
+**Files Modified:**
+- `src/app/(dashboard)/groups/page.tsx` - Added message management dialogs and UI

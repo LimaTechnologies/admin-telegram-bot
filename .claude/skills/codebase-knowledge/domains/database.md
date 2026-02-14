@@ -1,9 +1,9 @@
 # Domain: Database (MongoDB + Mongoose)
 
 ## Last Update
-- **Date:** 2026-02-11
-- **Commit:** 25f97e0
-- **Summary:** Finalized subscription expiration tracking in PurchaseModel with accessExpiresAt, sentMessages array for message deletion, and notification flags. Indexes created for efficient worker queries.
+- **Date:** 2026-02-14
+- **Commit:** a923cae
+- **Summary:** Bulk message deletion system added - new job data types and audit actions for managing Telegram group message cleanup
 
 ## Files
 
@@ -37,10 +37,10 @@
 - **utilities** - Services use models for business logic
 
 ## Recent Commits
+- a923cae - feat: add subscription expiration system and image cropper
 - 25f97e0 - feat: add clickable model name to open detail page
 - 4c4a76b - docs: update CLAUDE.md with model detail pages changes
 - 48ae98e - feat: migrate model editing from modals to dedicated pages
-- (2026-02-11) - feat: add subscription expiration system with notifications
 - 72dd834 - docs: document model purchase PIX payment feature
 
 ## Purchase Models (NEW - 2026-02-10)
@@ -255,9 +255,48 @@ for (const batch of chunkArray(photos, 10)) {
 - Uses public URLs (S3, Unsplash, etc.)
 - Delivered only when purchase.status === 'paid'
 
+### Bulk Message Deletion Data Types (2026-02-14)
+
+**DeleteMessagesBulkJobData:**
+```typescript
+{
+  chatId: string;           // Telegram chat ID
+  messageIds: number[];     // Array of message IDs to delete
+  groupDbId?: string;       // MongoDB _id for updating PostHistory
+}
+```
+
+**ClearAllMessagesJobData:**
+```typescript
+{
+  chatId: string;              // Telegram chat ID
+  groupDbId: string;           // MongoDB _id for querying PostHistory
+  fromMessageId?: number;      // Start from this message ID (for range deletion)
+  toMessageId?: number;        // End at this message ID
+  olderThanDays?: number;      // Delete messages older than X days
+}
+```
+
+**Deletion Flow:**
+1. Dashboard calls `group.bulkDeleteMessages` or `group.clearAllMessages`
+2. tRPC route enqueues job via BullMQ
+3. Worker processor handles deletion:
+   - Fetches message IDs from PostHistory (if using clearAllMessages)
+   - Deletes messages via Telegram API with rate limiting (50ms between calls)
+   - Updates PostHistory records: `status: 'deleted'`
+   - Handles rate limits and permission errors
+4. Audit log records: `group.bulkDeleteMessages` or `group.clearAllMessages`
+
+**Attention:**
+- Messages are only deleted if bot has `canDeleteMessages` permission
+- Failed deletes due to permission/rate-limit are retried via BullMQ
+- PostHistory records kept with `status: 'deleted'` for audit trail (not removed)
+- Single message deletion uses `delete-message` job type (different from bulk)
+
 ### Gotchas
 - MongoDB connection is lazy (connects on first query)
 - Use `@common` alias to import models
 - Settings model is singleton (findOne or create)
 - AuditLog timestamps come from metadata.timestamp, not createdAt
 - Product contentPhotos must be batched (max 10 per Telegram media group)
+- Bulk deletion requires PostHistory records linking to group (via `group.getMessages`)
