@@ -6,9 +6,9 @@
 
 ## Last Change
 
-**Branch:** feature/bulk-message-deletion
-**Date:** 2026-02-14
-**Summary:** Added bulk message deletion for Telegram channels/groups. Dashboard UI with "Manage Messages" and "Clear All Messages" actions. Uses Telegram's deleteMessages API for batch deletion (100 msgs/request). New tRPC endpoints: bulkDeleteMessages, clearAllMessages, getMessages.
+**Branch:** fix/bot-payment-qrcode-and-instant-confirm
+**Date:** 2026-02-16
+**Summary:** Fixed bot payment flow issues. Replaced deprecated Google Charts QR code API with api.qrserver.com. Added instant payment confirmation when user clicks "Já transferi" (instead of waiting 10s auto-confirm). Content photos now delivered immediately after confirmation.
 
 ---
 
