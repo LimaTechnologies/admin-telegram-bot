@@ -85,11 +85,15 @@ const localPayments = new Map<
     expiresAt: Date;
     paidAt?: Date;
     pixCopyPaste: string;
+    autoConfirmTimer?: ReturnType<typeof setTimeout>;
   }
 >();
 
 // Auto-pay simulation delay for local fallback (10 seconds)
 const AUTO_PAY_DELAY_MS = 10000;
+
+// Map purchase ID to payment ID for instant confirmation
+const purchaseToPaymentMap = new Map<string, string>();
 
 export class ArkamaService {
   private static api: AxiosInstance | null = null;
@@ -276,10 +280,17 @@ export class ArkamaService {
 
   /**
    * Manually confirm a payment (for testing/demo - only works with local payments)
+   * Cancels the auto-confirm timer if active
    */
   static async confirmPayment(paymentId: string): Promise<boolean> {
     const payment = localPayments.get(paymentId);
     if (!payment) return false;
+
+    // Cancel auto-confirm timer if exists
+    if (payment.autoConfirmTimer) {
+      clearTimeout(payment.autoConfirmTimer);
+      payment.autoConfirmTimer = undefined;
+    }
 
     payment.status = 'paid';
     payment.paidAt = new Date();
@@ -287,6 +298,39 @@ export class ArkamaService {
 
     logger.info('[Arkama] Payment manually confirmed', { paymentId });
     return true;
+  }
+
+  /**
+   * Register purchase ID to payment ID mapping for instant confirmation
+   */
+  static registerPurchaseMapping(purchaseId: string, paymentId: string): void {
+    purchaseToPaymentMap.set(purchaseId, paymentId);
+    logger.info('[Arkama] Purchase mapping registered', { purchaseId, paymentId });
+  }
+
+  /**
+   * Confirm payment by purchase ID (instant confirmation when user clicks "Já paguei")
+   * Works only for local payments
+   */
+  static async confirmPaymentByPurchaseId(purchaseId: string): Promise<boolean> {
+    const paymentId = purchaseToPaymentMap.get(purchaseId);
+    if (!paymentId) {
+      logger.warn('[Arkama] No payment mapping found for purchase', { purchaseId });
+      return false;
+    }
+
+    const confirmed = await this.confirmPayment(paymentId);
+    if (confirmed) {
+      purchaseToPaymentMap.delete(purchaseId);
+    }
+    return confirmed;
+  }
+
+  /**
+   * Check if a payment is local (for instant confirmation logic)
+   */
+  static isLocalPayment(paymentId: string): boolean {
+    return paymentId.startsWith('local_') || localPayments.has(paymentId);
   }
 
   /**
@@ -331,27 +375,39 @@ export class ArkamaService {
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
     const pixCopyPaste = this.generateLocalPixCode(input.amount, paymentId);
 
-    localPayments.set(paymentId, {
-      status: 'pending',
+    // Create payment entry
+    const paymentEntry = {
+      status: 'pending' as const,
       amount: input.amount,
       currency: input.currency,
       createdAt: new Date(),
       expiresAt,
       pixCopyPaste,
-    });
+      autoConfirmTimer: undefined as ReturnType<typeof setTimeout> | undefined,
+    };
 
-    // Auto-confirm after delay (for demo)
-    setTimeout(() => {
+    // Auto-confirm after delay (for demo) - can be cancelled if user clicks "Já paguei"
+    paymentEntry.autoConfirmTimer = setTimeout(() => {
       const payment = localPayments.get(paymentId);
       if (payment && payment.status === 'pending') {
         payment.status = 'paid';
         payment.paidAt = new Date();
+        payment.autoConfirmTimer = undefined;
         localPayments.set(paymentId, payment);
         logger.info('[Arkama Local] Payment auto-confirmed', { paymentId });
       }
     }, AUTO_PAY_DELAY_MS);
 
-    logger.info('[Arkama Local] Created local payment', { paymentId, amount: input.amount });
+    localPayments.set(paymentId, paymentEntry);
+
+    // Register the externalId (transactionId) to paymentId mapping
+    purchaseToPaymentMap.set(input.externalId, paymentId);
+
+    logger.info('[Arkama Local] Created local payment', {
+      paymentId,
+      amount: input.amount,
+      externalId: input.externalId,
+    });
 
     return {
       success: true,
@@ -408,10 +464,12 @@ export class ArkamaService {
 
   /**
    * Generate QR code URL using a free QR code API
+   * Note: Google Charts API was deprecated in 2019
+   * Using api.qrserver.com which is free and reliable
    */
   private static generateQrCodeUrl(data: string): string {
-    // Using Google Charts API for QR code generation
     const encodedData = encodeURIComponent(data);
-    return `https://chart.googleapis.com/chart?chs=300x300&cht=qr&chl=${encodedData}&choe=UTF-8`;
+    // Using goqr.me API - free, no rate limits, reliable
+    return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodedData}`;
   }
 }

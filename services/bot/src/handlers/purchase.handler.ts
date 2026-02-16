@@ -510,6 +510,37 @@ async function checkPaymentStatus(ctx: Context, purchaseId: string) {
       return;
     }
 
+    // For local payments: instant confirmation when user clicks "Já paguei"
+    // This simulates the user completing payment and improves UX
+    if (ArkamaService.isLocalPayment(transaction.externalId)) {
+      // Confirm instantly when user clicks the button
+      const confirmed = await ArkamaService.confirmPayment(transaction.externalId);
+
+      if (confirmed) {
+        logger.info('Local payment instant-confirmed', {
+          purchaseId,
+          paymentId: transaction.externalId,
+        });
+
+        transaction.status = 'paid';
+        transaction.paidAt = new Date();
+        await transaction.save();
+
+        purchase.status = 'paid';
+        await purchase.save();
+
+        await TelegramUserModel.findOneAndUpdate(
+          { telegramId: purchase.telegramUserId },
+          { $inc: { totalPurchases: 1, totalSpent: purchase.amount } }
+        );
+
+        // Deliver the content!
+        await deliverContent(ctx, purchase);
+        return;
+      }
+    }
+
+    // For real Arkama payments: check status via API
     const statusResponse = await ArkamaService.checkPaymentStatus({
       paymentId: transaction.externalId,
     });
